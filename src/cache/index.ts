@@ -22,7 +22,7 @@ export type CachedModel<T> = {
 } & EntityLike;
 
 class SquidCache {
-  static instance: SquidCache;
+  static cacheInstance: SquidCache;
 
   private processorContext: BatchContext<Store, unknown> | null = null;
 
@@ -73,9 +73,9 @@ class SquidCache {
   /**
    * Get initialized cache instance
    */
-  static getInstance(): SquidCache {
-    if (!this.instance) this.instance = new SquidCache();
-    return this.instance;
+  static get instance(): SquidCache {
+    if (!this.cacheInstance) this.cacheInstance = new SquidCache();
+    return this.cacheInstance;
   }
 
   /**
@@ -407,4 +407,4 @@ class SquidCache {
   }
 }
 
-export default SquidCache.getInstance();
+export const ProcessorCache = SquidCache.instance;

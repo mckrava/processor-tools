@@ -10,7 +10,7 @@ export declare type CachedModel<T> = {
     [P in keyof T]: Exclude<T[P], null | undefined> extends EntityLike ? null | undefined extends T[P] ? EntityLike | null | undefined : EntityLike : T[P];
 } & EntityLike;
 declare class SquidCache {
-    static instance: SquidCache;
+    static cacheInstance: SquidCache;
     private processorContext;
     private entityRelationsParams;
     private cacheClassesMap;
@@ -40,7 +40,7 @@ declare class SquidCache {
     /**
      * Get initialized cache instance
      */
-    static getInstance(): SquidCache;
+    static get instance(): SquidCache;
     /**
      * Add request for loading all entities of defined class.
      */
@@ -123,6 +123,6 @@ declare class SquidCache {
      */
     isDirty(): boolean;
 }
-declare const _default: SquidCache;
-export default _default;
+export declare const ProcessorCache: SquidCache;
+export {};
 //# sourceMappingURL=index.d.ts.map
