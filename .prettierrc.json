@@ -1,0 +1,17 @@
+{
+  "parser": "typescript",
+  "arrowParens": "avoid",
+  "overrides": [
+    {
+      "files": [".*", "*.json"],
+      "options": { "parser": "json" }
+    },
+    {
+      "files": ["*.js"],
+      "options": { "parser": "typescript" }
+    }
+  ],
+  "trailingComma": "none",
+  "singleQuote": true,
+  "printWidth": 80
+}
