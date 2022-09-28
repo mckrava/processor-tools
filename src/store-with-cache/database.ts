@@ -14,7 +14,7 @@ export class TypeormDatabaseWithCache extends TypeormDatabase {
   }
 
   //@ts-ignore
-  protected async runTransaction(from: number, to: number, cb: (store: StoreWithCache) => Promise<void>): Promise<void> {
+  protected override async runTransaction(from: number, to: number, cb: (store: StoreWithCache) => Promise<void>): Promise<void> {
     let tx: Promise<Tx> | undefined;
     let open = true;
 
@@ -43,7 +43,7 @@ export class TypeormDatabaseWithCache extends TypeormDatabase {
     }
   }
 
-  async transact(from: number, to: number, cb: (store: StoreWithCache) => Promise<void>): Promise<void> {
+  override async transact(from: number, to: number, cb: (store: StoreWithCache) => Promise<void>): Promise<void> {
     let retries = 3
     while (true) {
       try {

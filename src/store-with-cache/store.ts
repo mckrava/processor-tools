@@ -62,6 +62,9 @@ export class StoreWithCache extends Store {
    * additional check for "soft remove" flag (e.g. additional field
    * "deleted: true" or "active: false")
    */
+  // TODO theoretically won't be used as original .find***() method
+  //  can be used which will save results into local cache store
+  //  underhood.
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, findOptions?: FindOptionsWhere<T> | FindOptionsWhere<T>[]): StoreWithCache;
 
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, opt?: string | string[] | FindOptionsWhere<T> | FindOptionsWhere<T>[]): StoreWithCache {
@@ -373,33 +376,33 @@ export class StoreWithCache extends Store {
     const response = await fetchCb();
     //@ts-ignore
     if (typeof response !== 'undefined' && typeof response !== 'number') this._upsert(response, false);
-    return response;
+    return response; // TODO should be returned the same entity instance as located in local cache store
   }
 
-  count<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<number> {
+  override count<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<number> {
     return this._processFetch(entityClass, (): Promise<number> => super.count(entityClass, options));
   }
 
-  countBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<number> {
+  override countBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<number> {
     return this._processFetch(entityClass, (): Promise<number> => super.countBy(entityClass, where));
   }
 
-  async find<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<E[]> {
+  override find<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<E[]> {
     return this._processFetch(entityClass, (): Promise<E[]> => super.find(entityClass, options));
   }
 
-  async findBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E[]> {
+  override findBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E[]> {
     return this._processFetch(entityClass, (): Promise<E[]> => super.findBy(entityClass, where));
   }
 
-  findOne<E extends Entity>(entityClass: EntityClass<E>, options: FindOneOptions<E>): Promise<E | undefined> {
+  override findOne<E extends Entity>(entityClass: EntityClass<E>, options: FindOneOptions<E>): Promise<E | undefined> {
     return this._processFetch(entityClass, (): Promise<E | undefined> => super.findOne(entityClass, options));
   }
-  findOneBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E | undefined> {
+  override findOneBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E | undefined> {
     return this._processFetch(entityClass, (): Promise<E | undefined> => super.findOneBy(entityClass, where));
   }
 
-  get<E extends Entity>(entityClass: EntityClass<E>, optionsOrId: FindOneOptions<E> | string): Promise<E | undefined> {
+  override get<E extends Entity>(entityClass: EntityClass<E>, optionsOrId: FindOneOptions<E> | string): Promise<E | undefined> {
     return this._processFetch(entityClass, (): Promise<E | undefined> => super.get(entityClass, optionsOrId));
   }
 
