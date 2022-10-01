@@ -17,6 +17,7 @@
     "test": "mocha lib/**/*.test.js"
   },
   "dependencies": {
+    "@subsquid/openreader": "^3.1.0",
     "assert": "^2.0.0",
     "typeorm": "^0.3.6"
   },

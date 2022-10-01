@@ -1,22 +1,23 @@
 import { EntityClass, Store, Entity, FindManyOptions, FindOneOptions } from '@subsquid/typeorm-store';
 import { EntityManager, FindOptionsWhere } from 'typeorm';
+import { SchemeMetadata } from './utils/schemaMetadata';
 export { EntityClass, Entity, FindManyOptions, FindOneOptions, TypeormDatabase, FullTypeormDatabase, IsolationLevel } from '@subsquid/typeorm-store';
 export declare type EntityClassConstructable = EntityClass<Entity>;
-export declare type CacheEntityParams = EntityClassConstructable | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>];
+export declare type CacheEntityParams = EntityClassConstructable | [
+    EntityClassConstructable,
+    Record<keyof EntityClassConstructable, EntityClassConstructable>
+];
 export declare type CachedModel<T> = {
-    [P in keyof T]: Exclude<T[P], null | undefined> extends Entity ? (null | undefined extends T[P] ? Entity | null | undefined : Entity) : T[P];
+    [P in keyof T]: Exclude<T[P], null | undefined> extends Entity ? null | undefined extends T[P] ? Entity | null | undefined : Entity : T[P];
 } & Entity;
 export declare class StoreWithCache extends Store {
     private _em;
-    private entityRelationsParams;
-    private cacheClassesMap;
+    private schemaMetadata;
     private entities;
     private entitiesForFlush;
     private deferredGetList;
-    private deferredFindWhereList;
     private deferredRemoveList;
-    constructor(_em: () => Promise<EntityManager>);
-    cacheInit(entityRelationsParams: CacheEntityParams[]): void;
+    constructor(_em: () => Promise<EntityManager>, schemaMetadata: SchemeMetadata);
     /**
      * Add request for loading all entities of defined class.
      */
@@ -27,19 +28,34 @@ export declare class StoreWithCache extends Store {
      */
     deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): StoreWithCache;
     /**
-     * Add requests for find entities by "FindManyOptions" parameters.
-     * Can be useful if user needs fetch list of entities by id with
-     * additional check for "soft remove" flag (e.g. additional field
-     * "deleted: true" or "active: false")
-     */
-    deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, findOptions?: FindOptionsWhere<T> | FindOptionsWhere<T>[]): StoreWithCache;
-    /**
      * Add ids of entities which should be removed, resolved after Cache.flush()
      * Keeps items as Map structure.
      * If item is added to the list for deferredRemove, it will be removed from local cache and won't be available for
      * Cache.get() method.
      */
     deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): StoreWithCache;
+    private _upsert;
+    /**
+     * Set/update item in cache by id.
+     * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
+     */
+    cacheUpsert<T extends CachedModel<T>>(entities: T[]): void;
+    cacheUpsert<T extends CachedModel<T>>(entity: T): void;
+    /**
+     * Load all deferred get from the db, clear deferredLoad and deferredFindWhereList items list,
+     * set loaded items to cache storage.
+     */
+    load(): Promise<void>;
+    /**
+     * Persist all updates to the db.
+     *
+     * "this.entitiesForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
+     * execution of ".delete || .clear || .deferredRemove" methods. But as cache store doesn't contain removed items,
+     * they won't be accidentally saved into DB.
+     */
+    cacheFlush(): Promise<void>;
+    private _flushAll;
+    private _flushByClass;
     /**
      * Check by ID if entity is existing in cache
      */
@@ -66,28 +82,6 @@ export declare class StoreWithCache extends Store {
      * Delete all entities of specific class from cache storage
      */
     cacheClear<T extends Entity>(entityConstructor: EntityClass<T>): void;
-    private _upsert;
-    /**
-     * Set/update item in cache by id.
-     * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
-     */
-    cacheUpsert<T extends CachedModel<T>>(entities: T[]): void;
-    cacheUpsert<T extends CachedModel<T>>(entity: T): void;
-    /**
-     * Load all deferred get from the db, clear deferredLoad and deferredFindWhereList items list,
-     * set loaded items to cache storage.
-     */
-    load(): Promise<void>;
-    /**
-     * Persist all updates to the db.
-     *
-     * "this.entitiesForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
-     * execution of ".delete || .clear || .deferredRemove" methods. But as cache store doesn't contain removed items,
-     * they won't be accidentally saved into DB.
-     */
-    cacheFlush(): Promise<void>;
-    private _flushAll;
-    private _flushByClass;
     /**
      * Purge current cache.
      */
@@ -101,6 +95,13 @@ export declare class StoreWithCache extends Store {
      */
     cacheIsDirty(): boolean;
     private _processFetch;
+    save<E extends Entity>(entity: E): Promise<void>;
+    save<E extends Entity>(entities: E[]): Promise<void>;
+    insert<E extends Entity>(entity: E): Promise<void>;
+    insert<E extends Entity>(entities: E[]): Promise<void>;
+    remove<E extends Entity>(entity: E): Promise<void>;
+    remove<E extends Entity>(entities: E[]): Promise<void>;
+    remove<E extends Entity>(entityClass: EntityClass<E>, id: string | string[]): Promise<void>;
     count<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<number>;
     countBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<number>;
     find<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<E[]>;
