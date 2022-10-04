@@ -1,23 +1,28 @@
-import { EntityClass, Store, Entity, FindManyOptions, FindOneOptions } from '@subsquid/typeorm-store';
+import { EntityClass, Entity, FindManyOptions, FindOneOptions } from '@subsquid/typeorm-store';
 import { EntityManager, FindOptionsWhere } from 'typeorm';
 import { SchemeMetadata } from './utils/schemaMetadata';
 export { EntityClass, Entity, FindManyOptions, FindOneOptions, TypeormDatabase, FullTypeormDatabase, IsolationLevel } from '@subsquid/typeorm-store';
 export declare type EntityClassConstructable = EntityClass<Entity>;
-export declare type CacheEntityParams = EntityClassConstructable | [
-    EntityClassConstructable,
-    Record<keyof EntityClassConstructable, EntityClassConstructable>
-];
+export declare type CacheEntityParams = EntityClassConstructable | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>];
 export declare type CachedModel<T> = {
-    [P in keyof T]: Exclude<T[P], null | undefined> extends Entity ? null | undefined extends T[P] ? Entity | null | undefined : Entity : T[P];
+    [P in keyof T]: Exclude<T[P], null | undefined> extends Entity ? (null | undefined extends T[P] ? Entity | null | undefined : Entity) : T[P];
 } & Entity;
-export declare class StoreWithCache extends Store {
-    private _em;
+export declare class CacheStorage {
+    private static instance;
+    cacheMarker: string;
+    entities: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
+    entitiesForFlush: Map<EntityClassConstructable, Set<string>>;
+    deferredGetList: Map<EntityClassConstructable, Set<string>>;
+    deferredRemoveList: Map<EntityClassConstructable, Set<string>>;
+    private constructor();
+    static getInstance(): CacheStorage;
+}
+export declare class StoreWithCache {
+    private em;
+    private cacheStorage;
     private schemaMetadata;
-    private entities;
-    private entitiesForFlush;
-    private deferredGetList;
-    private deferredRemoveList;
-    constructor(_em: () => Promise<EntityManager>, schemaMetadata: SchemeMetadata);
+    storeMarker: string;
+    constructor(em: () => Promise<EntityManager>, cacheStorage: CacheStorage, schemaMetadata: SchemeMetadata);
     /**
      * Add request for loading all entities of defined class.
      */
@@ -49,7 +54,7 @@ export declare class StoreWithCache extends Store {
     /**
      * Persist all updates to the db.
      *
-     * "this.entitiesForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
+     * "this.cacheStorage.entitiesForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
      * execution of ".delete || .clear || .deferredRemove" methods. But as cache store doesn't contain removed items,
      * they won't be accidentally saved into DB.
      */
@@ -94,11 +99,28 @@ export declare class StoreWithCache extends Store {
      * If there were upsets after Cache.load()
      */
     cacheIsDirty(): boolean;
+    /**
+     * ::: TypeORM Store methods :::
+     */
     private _processFetch;
     save<E extends Entity>(entity: E): Promise<void>;
     save<E extends Entity>(entities: E[]): Promise<void>;
+    private saveMany;
+    private getFkSignature;
+    private upsertMany;
+    /**
+     * Inserts a given entity or entities into the database.
+     * Does not check if the entity(s) exist in the database and will fail if a duplicate is inserted.
+     *
+     * Executes a primitive INSERT operation without cascades, relations, etc.
+     */
     insert<E extends Entity>(entity: E): Promise<void>;
     insert<E extends Entity>(entities: E[]): Promise<void>;
+    /**
+     * Deletes a given entity or entities from the database.
+     *
+     * Unlike {@link EntityManager.remove} executes a primitive DELETE query without cascades, relations, etc.
+     */
     remove<E extends Entity>(entity: E): Promise<void>;
     remove<E extends Entity>(entities: E[]): Promise<void>;
     remove<E extends Entity>(entityClass: EntityClass<E>, id: string | string[]): Promise<void>;
