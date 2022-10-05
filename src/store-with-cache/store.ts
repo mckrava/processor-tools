@@ -1,20 +1,66 @@
-import { EntityClass, Store, Entity, FindManyOptions, FindOneOptions, TypeormDatabaseOptions } from '@subsquid/typeorm-store';
-
 import { EntityManager, FindOptionsOrder, FindOptionsRelations, FindOptionsWhere, In } from 'typeorm';
 import { EntityTarget } from 'typeorm/common/EntityTarget';
 import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata';
 import assert from 'assert';
 import { BatchContext } from '@subsquid/substrate-processor';
-import { SchemeMetadata } from './utils/schemaMetadata';
+import { SchemaMetadata } from './utils/schemaMetadata';
+import { option } from 'fast-check';
 
-export { EntityClass, Entity, FindManyOptions, FindOneOptions, TypeormDatabase, FullTypeormDatabase, IsolationLevel } from '@subsquid/typeorm-store';
+export { TypeormDatabase, FullTypeormDatabase, IsolationLevel } from '@subsquid/typeorm-store';
+
+export interface EntityClass<T> {
+  new (): T;
+}
+
+export interface Entity {
+  id: string;
+}
+
+/**
+ * Defines a special criteria to find specific entity.
+ */
+export interface FindOneOptions<Entity = any> {
+  /**
+   * Adds a comment with the supplied string in the generated query.  This is
+   * helpful for debugging purposes, such as finding a specific query in the
+   * database server's logs, or for categorization using an APM product.
+   */
+  comment?: string;
+  /**
+   * Simple condition that should be applied to match entities.
+   */
+  where?: FindOptionsWhere<Entity>[] | FindOptionsWhere<Entity>;
+  /**
+   * Indicates what relations of entity should be loaded (simplified left join form).
+   */
+  // relations?: FindOptionsRelations<Entity>;
+  /**
+   * Order, in which entities should be ordered.
+   */
+  order?: FindOptionsOrder<Entity>;
+}
+
+export interface FindManyOptions<Entity = any> extends FindOneOptions<Entity> {
+  /**
+   * Offset (paginated) where from entities should be taken.
+   */
+  skip?: number;
+  /**
+   * Limit (paginated) - max number of entities should be taken.
+   */
+  take?: number;
+}
 
 export type EntityClassConstructable = EntityClass<Entity>;
 
-export type CacheEntityParams = EntityClassConstructable | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>]; // Inherited from FindOneOptions['loadRelationIds']['relations']
+// export type CacheEntityParams = EntityClassConstructable | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>]; // Inherited from FindOneOptions['loadRelationIds']['relations']
 
 export type CachedModel<T> = {
-  [P in keyof T]: Exclude<T[P], null | undefined> extends Entity ? (null | undefined extends T[P] ? Entity | null | undefined : Entity) : T[P];
+  [P in keyof T]: Exclude<T[P], null | undefined> extends Entity
+    ? null | undefined extends T[P]
+      ? Entity | null | undefined
+      : Entity
+    : T[P];
 } & Entity;
 
 export class CacheStorage {
@@ -37,8 +83,11 @@ export class CacheStorage {
 }
 
 export class StoreWithCache {
-
-  constructor(private em: () => Promise<EntityManager>, private cacheStorage: CacheStorage, private schemaMetadata: SchemeMetadata) {}
+  constructor(
+    private em: () => Promise<EntityManager>,
+    private cacheStorage: CacheStorage,
+    private schemaMetadata: SchemaMetadata
+  ) {}
 
   /**
    * Add request for loading all entities of defined class.
@@ -107,9 +156,12 @@ export class StoreWithCache {
   private _upsert<T extends CachedModel<T>>(entityOrList: T | T[], setForFlush: boolean): void {
     if (Array.isArray(entityOrList) && entityOrList.length === 0) return;
 
-    const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList).constructor as EntityClass<T>;
-    const existingEntities = this.cacheStorage.entities.get(entityClassConstructor) || new Map<string, CachedModel<T>>();
-    const existingEntitiesForFlush = this.cacheStorage.entitiesForFlush.get(entityClassConstructor) || new Set<string>();
+    const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
+      .constructor as EntityClass<T>;
+    const existingEntities =
+      this.cacheStorage.entities.get(entityClassConstructor) || new Map<string, CachedModel<T>>();
+    const existingEntitiesForFlush =
+      this.cacheStorage.entitiesForFlush.get(entityClassConstructor) || new Set<string>();
 
     for (let entity of Array.isArray(entityOrList) ? entityOrList : [entityOrList]) {
       let entityDecorated = entity;
@@ -155,7 +207,11 @@ export class StoreWithCache {
        */
       if (idsSet.has('*')) {
         const entitiesList: CachedModel<typeof entityClass>[] = await this.find(entityClass, {
-          where: {}
+          where: {},
+          //@ts-ignore
+          loadRelationIds: {
+            disableMixedMap: true
+          }
         });
 
         this._upsert(entitiesList, false);
@@ -165,7 +221,11 @@ export class StoreWithCache {
       if (!idsSet || idsSet.size === 0) continue;
 
       const entitiesList: CachedModel<typeof entityClass>[] = await this.find(entityClass, {
-        where: { id: In([...idsSet.values()]) }
+        where: { id: In([...idsSet.values()]) },
+        //@ts-ignore
+        loadRelationIds: {
+          disableMixedMap: true
+        }
       });
 
       this._upsert(entitiesList, false);
@@ -203,14 +263,18 @@ export class StoreWithCache {
     if (this.cacheStorage.entitiesForFlush.has(entityConstructor)) {
       const forFlush = this.cacheStorage.entitiesForFlush.get(entityConstructor) || new Set<string>();
 
-      const listForSave = [...(this.cacheStorage.entities.get(entityConstructor) || new Map<string, CachedModel<T>>()).values()].filter(entity => forFlush.has(entity.id));
+      const listForSave = [
+        ...(this.cacheStorage.entities.get(entityConstructor) || new Map<string, CachedModel<T>>()).values()
+      ].filter(entity => forFlush.has(entity.id));
 
       await this.save(listForSave);
       this.cacheStorage.entitiesForFlush.set(entityConstructor, new Set<string>());
     }
 
     if (!this.cacheStorage.deferredRemoveList.has(entityConstructor)) return;
-    await this.remove(entityConstructor, [...(this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set<string>()).values()]);
+    await this.remove(entityConstructor, [
+      ...(this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set<string>()).values()
+    ]);
     this.cacheStorage.deferredRemoveList.set(entityConstructor, new Set<string>());
   }
 
@@ -288,8 +352,14 @@ export class StoreWithCache {
 
   private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<number>): Promise<number>;
   private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<E[]>): Promise<E[]>;
-  private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<E | undefined>): Promise<E | undefined>;
-  private async _processFetch<E extends Entity>(e: E | E[] | EntityClass<E>, fetchCb: () => Promise<E[] | E | undefined | number>) {
+  private _processFetch<E extends Entity>(
+    entityClass: EntityClass<E>,
+    fetchCb: () => Promise<E | undefined>
+  ): Promise<E | undefined>;
+  private async _processFetch<E extends Entity>(
+    e: E | E[] | EntityClass<E>,
+    fetchCb: () => Promise<E[] | E | undefined | number>
+  ) {
     // @ts-ignore
     await this._flushByClass(e);
     const response = await fetchCb();
@@ -394,7 +464,10 @@ export class StoreWithCache {
   remove<E extends Entity>(entityClass: EntityClass<E>, id: string | string[]): Promise<void>;
   async remove<E extends Entity>(e: E | E[] | EntityClass<E>, id?: string | string[]): Promise<void> {
     const singleEnOrClass = Array.isArray(e) ? e[0] : e;
-    const enClass = 'id' in singleEnOrClass ? (Object.getPrototypeOf(singleEnOrClass).constructor as EntityClass<E>) : (singleEnOrClass as EntityClass<E>);
+    const enClass =
+      'id' in singleEnOrClass
+        ? (Object.getPrototypeOf(singleEnOrClass).constructor as EntityClass<E>)
+        : (singleEnOrClass as EntityClass<E>);
     //@ts-ignore
     const eId = id ?? singleEnOrClass.id;
     await this._flushByClass(enClass);
@@ -426,16 +499,45 @@ export class StoreWithCache {
     return this._processFetch(entityClass, (): Promise<number> => this.em().then(em => em.count(entityClass, options)));
   }
 
-  countBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<number> {
+  countBy<E extends Entity>(
+    entityClass: EntityClass<E>,
+    where: FindOptionsWhere<E> | FindOptionsWhere<E>[]
+  ): Promise<number> {
     return this._processFetch(entityClass, (): Promise<number> => this.em().then(em => em.countBy(entityClass, where)));
   }
 
   find<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<E[]> {
-    return this._processFetch(entityClass, (): Promise<E[]> => this.em().then(em => em.find(entityClass, options)));
+    return this._processFetch(
+      entityClass,
+      (): Promise<E[]> =>
+        this.em().then(em =>
+          em.find(entityClass, {
+            ...options,
+            loadRelationIds: {
+              disableMixedMap: true
+            }
+          })
+        )
+    );
   }
 
-  findBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E[]> {
-    return this._processFetch(entityClass, (): Promise<E[]> => this.em().then(em => em.findBy(entityClass, where)));
+  findBy<E extends Entity>(
+    entityClass: EntityClass<E>,
+    where: FindOptionsWhere<E> | FindOptionsWhere<E>[]
+  ): Promise<E[]> {
+    // return this._processFetch(entityClass, (): Promise<E[]> => this.em().then(em => em.findBy(entityClass, where)));
+    return this._processFetch(
+      entityClass,
+      (): Promise<E[]> =>
+        this.em().then(em =>
+          em.find(entityClass, {
+            loadRelationIds: {
+              disableMixedMap: true
+            },
+            where
+          })
+        )
+    );
   }
 
   findOne<E extends Entity>(entityClass: EntityClass<E>, options: FindOneOptions<E>): Promise<E | undefined> {
@@ -443,12 +545,22 @@ export class StoreWithCache {
       entityClass,
       (): Promise<E | undefined> =>
         this.em()
-          .then(em => em.findOne(entityClass, options))
+          .then(em =>
+            em.findOne(entityClass, {
+              ...options,
+              loadRelationIds: {
+                disableMixedMap: true
+              }
+            })
+          )
           .then(noNull)
     );
   }
 
-  findOneBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E | undefined> {
+  findOneBy<E extends Entity>(
+    entityClass: EntityClass<E>,
+    where: FindOptionsWhere<E> | FindOptionsWhere<E>[]
+  ): Promise<E | undefined> {
     return this._processFetch(
       entityClass,
       (): Promise<E | undefined> =>
@@ -468,7 +580,10 @@ export class StoreWithCache {
 
   get<E extends Entity>(entityClass: EntityClass<E>, optionsOrId: FindOneOptions<E> | string): Promise<E | undefined> {
     if (typeof optionsOrId == 'string') {
-      return this._processFetch(entityClass, (): Promise<E | undefined> => this.findOneBy(entityClass, { id: optionsOrId } as any));
+      return this._processFetch(
+        entityClass,
+        (): Promise<E | undefined> => this.findOneBy(entityClass, { id: optionsOrId } as any)
+      );
     } else {
       return this._processFetch(entityClass, (): Promise<E | undefined> => this.findOne(entityClass, optionsOrId));
     }

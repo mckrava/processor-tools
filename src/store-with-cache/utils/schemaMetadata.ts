@@ -1,75 +1,105 @@
-import {
-  loadModel,
-  resolveGraphqlSchema
-} from '@subsquid/openreader/lib/tools';
-import { Model } from '@subsquid/openreader/src/model';
+import { EntityManager } from 'typeorm';
 
-export interface SchemeMetadata {
-  schemaModel: Model;
-  entitiesOrderedList: string[];
-}
+type EntityMetadataDecorated = { entityName: string; foreignKeys: string[] };
 
-/**
- * Sort entities list regarding its score.
- * @param originalList
- */
-function sortRelations(originalList: Map<string, number>): Map<string, number> {
-  const sorted = [...originalList.entries()].sort((a, b) =>
-    a[1] > b[1] ? -1 : b[1] > a[1] ? 1 : 0
-  );
+class Graph {
+  private adjacencyList: Record<string, string[]> = {};
+  private topNums: Map<string, number> = new Map();
 
-  return new Map(sorted);
-}
-
-/**
- * Generates DB schema model due to existing project "schema.graphql" file.
- * Based on generated DB schema model creates order list of all existing entities.
- * Ordered list should be used for flushAll process in StoreWithCache.
- *
- * Order of entities is following to the next logic (list position is equal to priority level in the order):
- * 1) entities, which are values of not nullable foreign keys fields.
- *    These items are sorted by frequency with which they used as foreign key in all entities.
- * 2) entities, which are values of nullable foreign keys fields.
- *    These items are sorted by frequency with which they used as foreign key in all entities.
- * 3) all other entities which do not fit to 2 previous rules.
- */
-export function getSchemaMetadata(): SchemeMetadata {
-  let model = loadModel(resolveGraphqlSchema());
-
-  let fkNullableEs = [];
-  const fkEntities = new Map<string, number>();
-  const entitiesListFull = [];
-
-  for (const name in model) {
-    const item = model[name];
-    if (item.kind !== 'entity') continue;
-    entitiesListFull.push(name);
-
-    for (const propName in item.properties) {
-      const propData = item.properties[propName];
-      if (propData.type.kind === 'fk' && propData.nullable)
-        fkNullableEs.push(propData.type.entity);
-
-      if (propData.type.kind === 'fk' && !propData.nullable)
-        fkEntities.set(
-          propData.type.entity,
-          (fkEntities.get(propData.type.entity) || 0) + 1
-        );
+  addVertex(vertex: string) {
+    if (!this.adjacencyList[vertex]) {
+      this.adjacencyList[vertex] = [];
     }
   }
-  fkEntities.forEach((val, key, map) => map.set(key, val * 1000));
+  addEdge(v1: string, v2: string) {
+    this.adjacencyList[v1].push(v2);
+  }
 
-  fkNullableEs.forEach(item =>
-    fkEntities.set(item, (fkEntities.get(item) || 0) + 1)
-  );
+  getSortedDFS(): string[] {
+    const vertices = Object.keys(this.adjacencyList);
+    const visited: Record<string, boolean> = {};
+    const visitedTmp: Record<string, boolean> = {};
 
-  const fullList = [
-    ...sortRelations(fkEntities).keys(),
-    ...entitiesListFull.filter(item => !fkEntities.has(item))
-  ];
+    let n = vertices.length - 1;
+    for (const v of vertices) {
+      if (!visited[v]) {
+        n = this.dfsTopSortHelper(v, n, visited, visitedTmp);
+      }
+    }
+    return [...this.topNums.entries()]
+      .sort((a, b) => (a[1] > b[1] ? -1 : b[1] > a[1] ? 1 : 0))
+      .map(item => item[0]);
+  }
 
-  return {
-    schemaModel: model,
-    entitiesOrderedList: fullList
-  };
+  dfsTopSortHelper(
+    v: string,
+    n: number,
+    visited: Record<string, boolean>,
+    visitedTmp: Record<string, boolean>
+  ) {
+    const neighbors = this.adjacencyList[v];
+
+    for (const neighbor of neighbors) {
+      if (!visited[neighbor]) {
+        if (visitedTmp[neighbor]) {
+          const msg = `Cycle => ${v} -> ${neighbor}`;
+          throw new Error(msg);
+        }
+        visitedTmp[neighbor] = true;
+
+        n = this.dfsTopSortHelper(neighbor, n, visited, visitedTmp);
+      }
+    }
+
+    delete visitedTmp[v];
+    visited[v] = true;
+
+    this.topNums.set(v, n);
+    return n - 1;
+  }
+}
+
+export class SchemaMetadata {
+  private _schemaModel: EntityMetadataDecorated[] = [];
+  private _entitiesOrderedList: string[] = [];
+
+  get schemaModel() {
+    return this._schemaModel;
+  }
+  get entitiesOrderedList() {
+    return this._entitiesOrderedList;
+  }
+
+  generateMetadata(em: () => Promise<EntityManager>): void {
+    em().then(emInst => {
+      this._schemaModel = emInst.connection.entityMetadatas.map(mdItem => {
+        return {
+          entityName: mdItem.name,
+          foreignKeys: mdItem.foreignKeys.map(
+            item => item.referencedEntityMetadata.name
+          )
+        };
+      });
+      this.generateEntitiesOrderedList();
+    });
+  }
+
+  generateEntitiesOrderedList() {
+    const graph = new Graph();
+    const modelDecorated = this._schemaModel.map(el => {
+      return {
+        ...el,
+        foreignKeys: new Set(el.foreignKeys)
+      };
+    });
+    modelDecorated.forEach(item => graph.addVertex(item.entityName));
+
+    modelDecorated.forEach(item => {
+      for (const fk of item.foreignKeys.values()) {
+        graph.addEdge(item.entityName, fk);
+      }
+    });
+
+    this._entitiesOrderedList = graph.getSortedDFS();
+  }
 }

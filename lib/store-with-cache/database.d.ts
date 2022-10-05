@@ -1,6 +1,6 @@
 import { DataSource, EntityManager } from 'typeorm';
 import { StoreWithCache, CacheStorage } from './store';
-import { SchemeMetadata } from './utils/schemaMetadata';
+import { SchemaMetadata } from './utils/schemaMetadata';
 export declare type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ';
 export interface TypeormDatabaseOptions {
     stateSchema?: string;
@@ -33,7 +33,7 @@ declare class BaseDatabase<S> {
  * Instances of this class should be considered to be completely opaque.
  */
 export declare class TypeormDatabaseWithCache extends BaseDatabase<StoreWithCache> {
-    schemaMetadata: SchemeMetadata;
+    schemaMetadata: SchemaMetadata;
     cacheStorage: CacheStorage;
     constructor();
     protected runTransaction(from: number, to: number, cb: (store: StoreWithCache) => Promise<void>): Promise<void>;

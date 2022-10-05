@@ -1,15 +1,50 @@
-import { EntityClass, Entity, FindManyOptions, FindOneOptions } from '@subsquid/typeorm-store';
-import { EntityManager, FindOptionsWhere } from 'typeorm';
-import { SchemeMetadata } from './utils/schemaMetadata';
-export { EntityClass, Entity, FindManyOptions, FindOneOptions, TypeormDatabase, FullTypeormDatabase, IsolationLevel } from '@subsquid/typeorm-store';
+import { EntityManager, FindOptionsOrder, FindOptionsWhere } from 'typeorm';
+import { SchemaMetadata } from './utils/schemaMetadata';
+export { TypeormDatabase, FullTypeormDatabase, IsolationLevel } from '@subsquid/typeorm-store';
+export interface EntityClass<T> {
+    new (): T;
+}
+export interface Entity {
+    id: string;
+}
+/**
+ * Defines a special criteria to find specific entity.
+ */
+export interface FindOneOptions<Entity = any> {
+    /**
+     * Adds a comment with the supplied string in the generated query.  This is
+     * helpful for debugging purposes, such as finding a specific query in the
+     * database server's logs, or for categorization using an APM product.
+     */
+    comment?: string;
+    /**
+     * Simple condition that should be applied to match entities.
+     */
+    where?: FindOptionsWhere<Entity>[] | FindOptionsWhere<Entity>;
+    /**
+     * Indicates what relations of entity should be loaded (simplified left join form).
+     */
+    /**
+     * Order, in which entities should be ordered.
+     */
+    order?: FindOptionsOrder<Entity>;
+}
+export interface FindManyOptions<Entity = any> extends FindOneOptions<Entity> {
+    /**
+     * Offset (paginated) where from entities should be taken.
+     */
+    skip?: number;
+    /**
+     * Limit (paginated) - max number of entities should be taken.
+     */
+    take?: number;
+}
 export declare type EntityClassConstructable = EntityClass<Entity>;
-export declare type CacheEntityParams = EntityClassConstructable | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>];
 export declare type CachedModel<T> = {
-    [P in keyof T]: Exclude<T[P], null | undefined> extends Entity ? (null | undefined extends T[P] ? Entity | null | undefined : Entity) : T[P];
+    [P in keyof T]: Exclude<T[P], null | undefined> extends Entity ? null | undefined extends T[P] ? Entity | null | undefined : Entity : T[P];
 } & Entity;
 export declare class CacheStorage {
     private static instance;
-    cacheMarker: string;
     entities: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
     entitiesForFlush: Map<EntityClassConstructable, Set<string>>;
     deferredGetList: Map<EntityClassConstructable, Set<string>>;
@@ -21,8 +56,7 @@ export declare class StoreWithCache {
     private em;
     private cacheStorage;
     private schemaMetadata;
-    storeMarker: string;
-    constructor(em: () => Promise<EntityManager>, cacheStorage: CacheStorage, schemaMetadata: SchemeMetadata);
+    constructor(em: () => Promise<EntityManager>, cacheStorage: CacheStorage, schemaMetadata: SchemaMetadata);
     /**
      * Add request for loading all entities of defined class.
      */

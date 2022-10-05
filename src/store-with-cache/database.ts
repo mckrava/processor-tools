@@ -4,7 +4,7 @@ import assert from 'assert';
 import { DataSource, EntityManager } from 'typeorm';
 import { StoreWithCache, CacheStorage } from './store';
 import { createTransaction, Tx } from './tx';
-import { getSchemaMetadata, SchemeMetadata } from './utils/schemaMetadata';
+import { SchemaMetadata } from './utils/schemaMetadata';
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ';
 
@@ -40,7 +40,9 @@ class BaseDatabase<S> {
                         height int not null
                     )
                 `);
-        let status: { height: number }[] = await em.query(`SELECT height FROM ${this.statusSchema}.status WHERE id = 0`);
+        let status: { height: number }[] = await em.query(
+          `SELECT height FROM ${this.statusSchema}.status WHERE id = 0`
+        );
         if (status.length == 0) {
           await em.query(`INSERT INTO ${this.statusSchema}.status (id, height) VALUES (0, -1)`);
           return -1;
@@ -85,10 +87,16 @@ class BaseDatabase<S> {
   }
 
   protected async updateHeight(em: EntityManager, from: number, to: number): Promise<void> {
-    return em.query(`UPDATE ${this.statusSchema}.status SET height = $2 WHERE id = 0 AND height < $1`, [from, to]).then((result: [data: any[], rowsChanged: number]) => {
-      let rowsChanged = result[1];
-      assert.strictEqual(rowsChanged, 1, 'status table was updated by foreign process, make sure no other processor is running');
-    });
+    return em
+      .query(`UPDATE ${this.statusSchema}.status SET height = $2 WHERE id = 0 AND height < $1`, [from, to])
+      .then((result: [data: any[], rowsChanged: number]) => {
+        let rowsChanged = result[1];
+        assert.strictEqual(
+          rowsChanged,
+          1,
+          'status table was updated by foreign process, make sure no other processor is running'
+        );
+      });
   }
 }
 
@@ -107,28 +115,30 @@ class BaseDatabase<S> {
  * Instances of this class should be considered to be completely opaque.
  */
 export class TypeormDatabaseWithCache extends BaseDatabase<StoreWithCache> {
-  schemaMetadata: SchemeMetadata;
+  schemaMetadata: SchemaMetadata;
   cacheStorage: CacheStorage;
 
   constructor() {
     super();
-    this.schemaMetadata = getSchemaMetadata();
+    this.schemaMetadata = new SchemaMetadata();
     this.cacheStorage = CacheStorage.getInstance();
   }
-  protected async runTransaction(from: number, to: number, cb: (store: StoreWithCache) => Promise<void>): Promise<void> {
+  protected async runTransaction(
+    from: number,
+    to: number,
+    cb: (store: StoreWithCache) => Promise<void>
+  ): Promise<void> {
     let tx: Promise<Tx> | undefined;
     let open = true;
+    const emPromise = () => {
+      assert(open, `Transaction was already closed`);
+      tx = tx || this.createTx(from, to);
+      return tx.then(tx => tx.em);
+    };
+    // TODO check execution order here
+    this.schemaMetadata.generateMetadata(emPromise);
 
-    let store = new StoreWithCache(
-      () => {
-        assert(open, `Transaction was already closed`);
-        tx = tx || this.createTx(from, to);
-        return tx.then(tx => tx.em);
-      },
-      this.cacheStorage,
-      this.schemaMetadata
-    );
-
+    let store = new StoreWithCache(emPromise, this.cacheStorage, this.schemaMetadata);
     try {
       await cb(store);
     } catch (e: any) {
