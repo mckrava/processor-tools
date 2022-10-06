@@ -151,15 +151,15 @@ export class StoreWithCache {
     return this;
   }
 
-  private _upsert<T extends CachedModel<T>>(entity: T, setForFlush: boolean): void;
-  private _upsert<T extends CachedModel<T>>(entities: T[], setForFlush: boolean): void;
-  private _upsert<T extends CachedModel<T>>(entityOrList: T | T[], setForFlush: boolean): void {
+  // private _upsert<E extends CachedModel<E>>(entity: E, setForFlush: boolean): void;
+  // private _upsert<E extends CachedModel<E>>(entities: E[], setForFlush: boolean): void;
+  private _upsert<E extends CachedModel<E>>(entityOrList: E | E[], setForFlush: boolean): void {
     if (Array.isArray(entityOrList) && entityOrList.length === 0) return;
 
     const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
-      .constructor as EntityClass<T>;
+      .constructor as EntityClass<E>;
     const existingEntities =
-      this.cacheStorage.entities.get(entityClassConstructor) || new Map<string, CachedModel<T>>();
+      this.cacheStorage.entities.get(entityClassConstructor) || new Map<string, CachedModel<E>>();
     const existingEntitiesForFlush =
       this.cacheStorage.entitiesForFlush.get(entityClassConstructor) || new Set<string>();
 
@@ -170,9 +170,9 @@ export class StoreWithCache {
 
         if (fieldValue !== null && typeof fieldValue === 'object' && !Array.isArray(fieldValue) && 'id' in fieldValue) {
           const fieldValueDecorated = fieldValue as unknown as Entity;
-          entityDecorated[entityFieldName as keyof T] = {
+          entityDecorated[entityFieldName as keyof E] = {
             id: fieldValueDecorated.id
-          } as unknown as T[keyof T];
+          } as unknown as E[keyof E];
           this._upsert(fieldValue as EntityClassConstructable[keyof EntityClassConstructable], false);
         }
       }
@@ -189,11 +189,10 @@ export class StoreWithCache {
    * Set/update item in cache by id.
    * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
    */
-  cacheUpsert<T extends CachedModel<T>>(entities: T[]): void;
   cacheUpsert<T extends CachedModel<T>>(entity: T): void;
-  cacheUpsert<T extends CachedModel<T>>(entityOrList: T | T[]): void {
-    //@ts-ignore
-    this._upsert(entityOrList, true);
+  cacheUpsert<T extends CachedModel<T>>(entities: T[]): void;
+  cacheUpsert<T extends CachedModel<T>>(e: T | T[]): void {
+    this._upsert(e, true);
   }
 
   /**
@@ -251,20 +250,20 @@ export class StoreWithCache {
     }
   }
 
-  private async _flushByClass<T extends Entity>(entityConstructor: EntityClass<T>): Promise<void> {
+  private async _flushByClass<E extends Entity>(entityConstructor: EntityClass<E>): Promise<void> {
     if (this.cacheStorage.entitiesForFlush.has(entityConstructor)) {
       const forFlush = this.cacheStorage.entitiesForFlush.get(entityConstructor) || new Set<string>();
 
       const listForSave = [
-        ...(this.cacheStorage.entities.get(entityConstructor) || new Map<string, CachedModel<T>>()).values()
+        ...(this.cacheStorage.entities.get(entityConstructor) || new Map<string, CachedModel<E>>()).values()
       ].filter(entity => forFlush.has(entity.id));
 
-      await this.save(listForSave);
+      await this._save(listForSave);
       this.cacheStorage.entitiesForFlush.set(entityConstructor, new Set<string>());
     }
 
     if (!this.cacheStorage.deferredRemoveList.has(entityConstructor)) return;
-    await this.remove(entityConstructor, [
+    await this._remove(entityConstructor, [
       ...(this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set<string>()).values()
     ]);
     this.cacheStorage.deferredRemoveList.set(entityConstructor, new Set<string>());
@@ -275,13 +274,6 @@ export class StoreWithCache {
    */
   cacheHas<T extends Entity>(entityConstructor: EntityClass<T>, id: string): boolean {
     return (this.cacheStorage.entities.get(entityConstructor) || new Map()).has(id);
-  }
-
-  /**
-   * Get entity by id form cache
-   */
-  cacheGet<T extends Entity>(entityConstructor: EntityClass<T>, id: string): T | null {
-    return (this.cacheStorage.entities.get(entityConstructor) || new Map()).get(id) || null;
   }
 
   /**
@@ -303,9 +295,11 @@ export class StoreWithCache {
   /**
    * Delete entity item from cache storage of the specific class
    */
-  cacheDelete<T extends Entity>(entityConstructor: EntityClass<T>, id: string): void {
+  cacheDelete<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): void {
     if (!this.cacheStorage.entities.has(entityConstructor)) return;
-    this.cacheStorage.entities.get(entityConstructor)!.delete(id);
+    for (const id of Array.isArray(idOrList) ? idOrList : [idOrList]) {
+      this.cacheStorage.entities.get(entityConstructor)!.delete(id);
+    }
   }
 
   /**
@@ -342,24 +336,24 @@ export class StoreWithCache {
    * ::: TypeORM Store methods :::
    */
 
-  private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<number>): Promise<number>;
-  private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<E[]>): Promise<E[]>;
-  private _processFetch<E extends Entity>(
-    entityClass: EntityClass<E>,
-    fetchCb: () => Promise<E | undefined>
-  ): Promise<E | undefined>;
-  private async _processFetch<E extends Entity>(
+  // private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<number>): Promise<number>;
+  // private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<E[]>): Promise<E[]>;
+  // private _processFetch<E extends Entity>(
+  //   entityClass: EntityClass<E>,
+  //   fetchCb: () => Promise<E | undefined>
+  // ): Promise<E | undefined>;
+
+  private async _processFetch<E extends Entity, RT extends E[] | E | undefined | number>(
     e: E | E[] | EntityClass<E>,
-    fetchCb: () => Promise<E[] | E | undefined | number>
-  ) {
-    // @ts-ignore
-    await this._flushByClass(e);
+    fetchCb: () => Promise<RT>
+  ): Promise<RT> {
+    await this._flushByClass(this._extractEntityClass(e));
     const response = await fetchCb();
 
-    //@ts-ignore
-    if (typeof response !== undefined && typeof response !== 'number')
+    if (response !== undefined && typeof response !== 'number') {
       //@ts-ignore
-      this._upsert(response, false);
+      this._upsert(response as CachedModel<E>[] | CachedModel<E>, false);
+    }
     return response; // TODO should be returned the same entity instance as located in local cache store
   }
 
@@ -370,6 +364,11 @@ export class StoreWithCache {
   async save<E extends Entity>(e: E | E[]): Promise<void> {
     //@ts-ignore
     this._upsert(e, false);
+    await this._save(e);
+  }
+  // private _save<E extends Entity>(entity: E): Promise<void>;
+  // private _save<E extends Entity>(entities: E[]): Promise<void>;
+  private async _save<E extends Entity>(e: E | E[]): Promise<void> {
     if (Array.isArray(e)) {
       if (e.length == 0) return;
       let entityClass = e[0].constructor as EntityClass<E>;
@@ -447,30 +446,48 @@ export class StoreWithCache {
   }
 
   /**
-   * Deletes a given entity or entities from the database.
+   * Deletes a given entity or entities from the database with pre-flushing cache content into DB.
    *
    * Unlike {@link EntityManager.remove} executes a primitive DELETE query without cascades, relations, etc.
    */
+
   remove<E extends Entity>(entity: E): Promise<void>;
   remove<E extends Entity>(entities: E[]): Promise<void>;
   remove<E extends Entity>(entityClass: EntityClass<E>, id: string | string[]): Promise<void>;
   async remove<E extends Entity>(e: E | E[] | EntityClass<E>, id?: string | string[]): Promise<void> {
-    const singleEnOrClass = Array.isArray(e) ? e[0] : e;
-    const enClass =
-      'id' in singleEnOrClass
-        ? (Object.getPrototypeOf(singleEnOrClass).constructor as EntityClass<E>)
-        : (singleEnOrClass as EntityClass<E>);
-    //@ts-ignore
-    const eId = id ?? singleEnOrClass.id;
-    await this._flushByClass(enClass);
+    if (id && !Array.isArray(e) && !('id' in e)) {
+      await this._flushByClass(e);
+      await this._remove(e, id);
+      this.cacheDelete(e, id);
+    } else if (id == null && ((Array.isArray(e) && 'id' in e[0]) || (!Array.isArray(e) && 'id' in e))) {
+      const entityClass = this._extractEntityClass(e);
+      if (Array.isArray(e)) {
+        for (let i = 1; i < e.length; i++) {
+          assert(entityClass === e[i].constructor, 'mass deletion allowed only for entities of the same class');
+        }
+      }
+      const idOrList = Array.isArray(e) ? (e as E[]).map(i => i.id) : (e as E).id;
+      await this._flushByClass(entityClass);
+      await this._remove(e as E | E[]);
+      this.cacheDelete(entityClass, idOrList);
+    } else {
+      return;
+    }
+  }
 
+  /**
+   * Deletes a given entity or entities from the database.
+   *
+   * Unlike {@link EntityManager.remove} executes a primitive DELETE query without cascades, relations, etc.
+   */
+  // private _remove<E extends Entity>(entity: E): Promise<void>;
+  // private _remove<E extends Entity>(entities: E[]): Promise<void>;
+  // private _remove<E extends Entity>(entityClass: EntityClass<E>, id?: string | string[]): Promise<void>;
+  private async _remove<E extends Entity>(e: E | E[] | EntityClass<E>, id?: string | string[]): Promise<void> {
     if (id == null) {
       if (Array.isArray(e)) {
         if (e.length == 0) return;
         let entityClass = e[0].constructor as EntityClass<E>;
-        for (let i = 1; i < e.length; i++) {
-          assert(entityClass === e[i].constructor, 'mass deletion allowed only for entities of the same class');
-        }
         await this.em().then(em =>
           em.delete(
             entityClass,
@@ -484,7 +501,6 @@ export class StoreWithCache {
     } else {
       await this.em().then(em => em.delete(e as EntityClass<E>, id));
     }
-    this.cacheDelete(enClass, eId);
   }
 
   count<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<number> {
@@ -517,7 +533,6 @@ export class StoreWithCache {
     entityClass: EntityClass<E>,
     where: FindOptionsWhere<E> | FindOptionsWhere<E>[]
   ): Promise<E[]> {
-    // return this._processFetch(entityClass, (): Promise<E[]> => this.em().then(em => em.findBy(entityClass, where)));
     return this._processFetch(
       entityClass,
       (): Promise<E[]> =>
@@ -562,23 +577,56 @@ export class StoreWithCache {
     );
   }
 
-  // findOneOrFail<E extends Entity>(entityTarget: EntityTarget<E>, options: FindOneOptions<E>): Promise<E> {
-  //   return this._processFetch(entityTarget, (): Promise<E[]> => this.em().then(em => em.findOneOrFail(entityTarget, options)));
-  // }
-  //
-  // findOneByOrFail<E extends Entity>(entityClass: EntityTarget<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E> {
-  //   return this._processFetch(entityTarget, (): Promise<E[]> => this.em().then(em => em.findOneByOrFail(entityClass, where)));
-  // }
+  findOneOrFail<E extends Entity>(entityClass: EntityClass<E>, options: FindOneOptions<E>): Promise<E> {
+    return this._processFetch(
+      entityClass,
+      (): Promise<E> =>
+        this.em().then(em =>
+          em.findOneOrFail(entityClass, {
+            ...options,
+            loadRelationIds: {
+              disableMixedMap: true
+            }
+          })
+        )
+    );
+  }
 
-  get<E extends Entity>(entityClass: EntityClass<E>, optionsOrId: FindOneOptions<E> | string): Promise<E | undefined> {
-    if (typeof optionsOrId == 'string') {
-      return this._processFetch(
-        entityClass,
-        (): Promise<E | undefined> => this.findOneBy(entityClass, { id: optionsOrId } as any)
-      );
-    } else {
-      return this._processFetch(entityClass, (): Promise<E | undefined> => this.findOne(entityClass, optionsOrId));
-    }
+  findOneByOrFail<E extends Entity>(
+    entityClass: EntityClass<E>,
+    where: FindOptionsWhere<E> | FindOptionsWhere<E>[]
+  ): Promise<E> {
+    return this._processFetch(
+      entityClass,
+      (): Promise<E> => this.em().then(em => em.findOneByOrFail(entityClass, where))
+    );
+  }
+
+  /**
+   * Get entity by ID either from cache or DB if cache storage doesn't contain requested item.
+   * @param entityClass
+   * @param id
+   */
+  get<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E | null> {
+    return (
+      ((this.cacheStorage.entities.get(entityClass) || new Map()).get(id) ||
+        this._processFetch(entityClass, (): Promise<E | undefined> => this.findOneBy(entityClass, { id } as any))) ??
+      null
+    );
+  }
+
+  getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E> {
+    return (
+      (this.cacheStorage.entities.get(entityClass) || new Map()).get(id) ||
+      this._processFetch(entityClass, (): Promise<E> => this.findOneByOrFail(entityClass, { id } as any))
+    );
+  }
+
+  private _extractEntityClass<E extends Entity>(e: E | E[] | EntityClass<E>): EntityClass<E> {
+    const singleEnOrClass = Array.isArray(e) ? e[0] : e;
+    return 'id' in singleEnOrClass
+      ? (singleEnOrClass.constructor as EntityClass<E>)
+      : (singleEnOrClass as EntityClass<E>);
   }
 }
 
