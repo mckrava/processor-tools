@@ -8,7 +8,7 @@ export declare class SchemaMetadata {
     private _entitiesOrderedList;
     get schemaModel(): EntityMetadataDecorated[];
     get entitiesOrderedList(): string[];
-    generateMetadata(em: () => Promise<EntityManager>): void;
+    getMetadata(em: () => Promise<EntityManager>): Promise<SchemaMetadata>;
     generateEntitiesOrderedList(): void;
 }
 export {};

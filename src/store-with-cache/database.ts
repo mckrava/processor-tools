@@ -130,15 +130,16 @@ export class TypeormDatabaseWithCache extends BaseDatabase<StoreWithCache> {
   ): Promise<void> {
     let tx: Promise<Tx> | undefined;
     let open = true;
-    const emPromise = () => {
-      assert(open, `Transaction was already closed`);
-      tx = tx || this.createTx(from, to);
-      return tx.then(tx => tx.em);
-    };
-    // TODO check execution order here
-    this.schemaMetadata.generateMetadata(emPromise);
 
-    let store = new StoreWithCache(emPromise, this.cacheStorage, this.schemaMetadata);
+    let store = new StoreWithCache(
+      () => {
+        assert(open, `Transaction was already closed`);
+        tx = tx || this.createTx(from, to);
+        return tx.then(tx => tx.em);
+      },
+      this.cacheStorage,
+      this.schemaMetadata
+    );
     try {
       await cb(store);
     } catch (e: any) {

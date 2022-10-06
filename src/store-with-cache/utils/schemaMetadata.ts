@@ -26,23 +26,16 @@ class Graph {
         n = this.dfsTopSortHelper(v, n, visited, visitedTmp);
       }
     }
-    return [...this.topNums.entries()]
-      .sort((a, b) => (a[1] > b[1] ? -1 : b[1] > a[1] ? 1 : 0))
-      .map(item => item[0]);
+    return [...this.topNums.entries()].sort((a, b) => (a[1] > b[1] ? -1 : b[1] > a[1] ? 1 : 0)).map(item => item[0]);
   }
 
-  dfsTopSortHelper(
-    v: string,
-    n: number,
-    visited: Record<string, boolean>,
-    visitedTmp: Record<string, boolean>
-  ) {
+  dfsTopSortHelper(v: string, n: number, visited: Record<string, boolean>, visitedTmp: Record<string, boolean>) {
     const neighbors = this.adjacencyList[v];
 
     for (const neighbor of neighbors) {
       if (!visited[neighbor]) {
         if (visitedTmp[neighbor]) {
-          const msg = `Cycle => ${v} -> ${neighbor}`;
+          const msg = `Relations cycle has been detected: ${neighbor} -> ${v} -> ${neighbor}`;
           throw new Error(msg);
         }
         visitedTmp[neighbor] = true;
@@ -70,18 +63,17 @@ export class SchemaMetadata {
     return this._entitiesOrderedList;
   }
 
-  generateMetadata(em: () => Promise<EntityManager>): void {
-    em().then(emInst => {
-      this._schemaModel = emInst.connection.entityMetadatas.map(mdItem => {
-        return {
-          entityName: mdItem.name,
-          foreignKeys: mdItem.foreignKeys.map(
-            item => item.referencedEntityMetadata.name
-          )
-        };
-      });
-      this.generateEntitiesOrderedList();
+  async getMetadata(em: () => Promise<EntityManager>): Promise<SchemaMetadata> {
+    if (this._schemaModel.length > 0) return Promise.resolve(this);
+    const emInst = await em();
+    this._schemaModel = emInst.connection.entityMetadatas.map(mdItem => {
+      return {
+        entityName: mdItem.name,
+        foreignKeys: mdItem.foreignKeys.map(item => item.referencedEntityMetadata.name)
+      };
     });
+    this.generateEntitiesOrderedList();
+    return this;
   }
 
   generateEntitiesOrderedList() {

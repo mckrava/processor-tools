@@ -207,11 +207,7 @@ export class StoreWithCache {
        */
       if (idsSet.has('*')) {
         const entitiesList: CachedModel<typeof entityClass>[] = await this.find(entityClass, {
-          where: {},
-          //@ts-ignore
-          loadRelationIds: {
-            disableMixedMap: true
-          }
+          where: {}
         });
 
         this._upsert(entitiesList, false);
@@ -221,11 +217,7 @@ export class StoreWithCache {
       if (!idsSet || idsSet.size === 0) continue;
 
       const entitiesList: CachedModel<typeof entityClass>[] = await this.find(entityClass, {
-        where: { id: In([...idsSet.values()]) },
-        //@ts-ignore
-        loadRelationIds: {
-          disableMixedMap: true
-        }
+        where: { id: In([...idsSet.values()]) }
       });
 
       this._upsert(entitiesList, false);
@@ -248,7 +240,7 @@ export class StoreWithCache {
 
   private async _flushAll(): Promise<void> {
     const entityClasses = new Map<string, EntityClassConstructable>();
-    const { entitiesOrderedList } = this.schemaMetadata;
+    const entitiesOrderedList = (await this.schemaMetadata.getMetadata(this.em)).entitiesOrderedList;
 
     [...this.cacheStorage.entities.keys()].forEach(item => entityClasses.set(item.name, item));
 
