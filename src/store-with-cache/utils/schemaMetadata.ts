@@ -3,8 +3,19 @@ import { EntityManager } from 'typeorm';
 type EntityMetadataDecorated = { entityName: string; foreignKeys: string[] };
 
 class Graph {
+  private graphSource: EntityMetadataDecorated[] = [];
   private adjacencyList: Record<string, string[]> = {};
   private topNums: Map<string, number> = new Map();
+  private _vertexesFullChains: Record<string, string[]> = {};
+  private _rootVertexesListOrdered: string[] = [];
+  private rootVertexCursor: string = '';
+
+  get vertexesFullChains(): Map<string, string[]> {
+    return new Map(Object.entries(this._vertexesFullChains));
+  }
+  get sortedGraphListDFS() {
+    return this._rootVertexesListOrdered;
+  }
 
   addVertex(vertex: string) {
     if (!this.adjacencyList[vertex]) {
@@ -15,7 +26,55 @@ class Graph {
     this.adjacencyList[v1].push(v2);
   }
 
-  getSortedDFS(): string[] {
+  schemeMetadataToFkGraph(metadata: EntityMetadataDecorated[]) {
+    this.graphSource = metadata;
+    const modelDecorated = metadata.map(el => {
+      return {
+        ...el,
+        foreignKeys: new Set(el.foreignKeys)
+      };
+    });
+    modelDecorated.forEach(item => this.addVertex(item.entityName));
+
+    modelDecorated.forEach(item => {
+      for (const fk of item.foreignKeys.values()) {
+        this.addEdge(item.entityName, fk);
+      }
+    });
+  }
+
+  generateSortedData() {
+    this.sortDFS();
+    this.generateVertexesTree();
+  }
+
+  generateVertexesTree(): void {
+    const vertices = Object.keys(this.adjacencyList);
+
+    for (const v of vertices) {
+      this.rootVertexCursor = v;
+      this._vertexesFullChains[this.rootVertexCursor] = [];
+
+      this.generateVertexesTreeHelper(v);
+    }
+
+    for (const edgeRoot in this._vertexesFullChains) {
+      const list = this._vertexesFullChains[edgeRoot].reverse().filter((x, i, a) => a.indexOf(x) == i);
+      this._vertexesFullChains[edgeRoot] = this._rootVertexesListOrdered.filter(rvl => list.includes(rvl));
+    }
+  }
+
+  private generateVertexesTreeHelper(v: string) {
+    const neighbors = this.adjacencyList[v];
+
+    for (const neighbor of neighbors) {
+      this._vertexesFullChains[this.rootVertexCursor].push(neighbor);
+      this.generateVertexesTreeHelper(neighbor);
+      // TODO add handler of cyclic
+    }
+  }
+
+  private sortDFS() {
     const vertices = Object.keys(this.adjacencyList);
     const visited: Record<string, boolean> = {};
     const visitedTmp: Record<string, boolean> = {};
@@ -23,13 +82,16 @@ class Graph {
     let n = vertices.length - 1;
     for (const v of vertices) {
       if (!visited[v]) {
-        n = this.dfsTopSortHelper(v, n, visited, visitedTmp);
+        n = this.dfsSortHelper(v, n, visited, visitedTmp);
       }
     }
-    return [...this.topNums.entries()].sort((a, b) => (a[1] > b[1] ? -1 : b[1] > a[1] ? 1 : 0)).map(item => item[0]);
+
+    this._rootVertexesListOrdered = [...this.topNums.entries()]
+      .sort((a, b) => (a[1] > b[1] ? -1 : b[1] > a[1] ? 1 : 0))
+      .map(item => item[0]);
   }
 
-  dfsTopSortHelper(v: string, n: number, visited: Record<string, boolean>, visitedTmp: Record<string, boolean>) {
+  private dfsSortHelper(v: string, n: number, visited: Record<string, boolean>, visitedTmp: Record<string, boolean>) {
     const neighbors = this.adjacencyList[v];
 
     for (const neighbor of neighbors) {
@@ -40,7 +102,7 @@ class Graph {
         }
         visitedTmp[neighbor] = true;
 
-        n = this.dfsTopSortHelper(neighbor, n, visited, visitedTmp);
+        n = this.dfsSortHelper(neighbor, n, visited, visitedTmp);
       }
     }
 
@@ -55,6 +117,7 @@ class Graph {
 export class SchemaMetadata {
   private _schemaModel: EntityMetadataDecorated[] = [];
   private _entitiesOrderedList: string[] = [];
+  private _entitiesRelationsChains: Map<string, string[]> = new Map();
 
   get schemaModel() {
     return this._schemaModel;
@@ -62,36 +125,31 @@ export class SchemaMetadata {
   get entitiesOrderedList() {
     return this._entitiesOrderedList;
   }
+  get entitiesRelationsChains() {
+    return this._entitiesRelationsChains;
+  }
 
   async getMetadata(em: () => Promise<EntityManager>): Promise<SchemaMetadata> {
     if (this._schemaModel.length > 0) return Promise.resolve(this);
     const emInst = await em();
     this._schemaModel = emInst.connection.entityMetadatas.map(mdItem => {
+      console.log('mdItem - ', mdItem);
       return {
         entityName: mdItem.name,
+        hasNonNullableRelations: mdItem.hasNonNullableRelations,
         foreignKeys: mdItem.foreignKeys.map(item => item.referencedEntityMetadata.name)
       };
     });
+    console.log('====================================');
     this.generateEntitiesOrderedList();
     return this;
   }
 
   generateEntitiesOrderedList() {
     const graph = new Graph();
-    const modelDecorated = this._schemaModel.map(el => {
-      return {
-        ...el,
-        foreignKeys: new Set(el.foreignKeys)
-      };
-    });
-    modelDecorated.forEach(item => graph.addVertex(item.entityName));
-
-    modelDecorated.forEach(item => {
-      for (const fk of item.foreignKeys.values()) {
-        graph.addEdge(item.entityName, fk);
-      }
-    });
-
-    this._entitiesOrderedList = graph.getSortedDFS();
+    graph.schemeMetadataToFkGraph(this._schemaModel);
+    graph.generateSortedData();
+    this._entitiesOrderedList = graph.sortedGraphListDFS;
+    this._entitiesRelationsChains = graph.vertexesFullChains;
   }
 }

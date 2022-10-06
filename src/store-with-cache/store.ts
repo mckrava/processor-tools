@@ -87,7 +87,9 @@ export class StoreWithCache {
     private em: () => Promise<EntityManager>,
     private cacheStorage: CacheStorage,
     private schemaMetadata: SchemaMetadata
-  ) {}
+  ) {
+    schemaMetadata.getMetadata(em)
+  }
 
   /**
    * Add request for loading all entities of defined class.
@@ -241,7 +243,10 @@ export class StoreWithCache {
     const entityClasses = new Map<string, EntityClassConstructable>();
     const entitiesOrderedList = (await this.schemaMetadata.getMetadata(this.em)).entitiesOrderedList;
 
-    [...this.cacheStorage.entities.keys()].forEach(item => entityClasses.set(item.name, item));
+    console.log('entitiesOrderedList - ', entitiesOrderedList);
+
+
+      [...this.cacheStorage.entities.keys()].forEach(item => entityClasses.set(item.name, item));
 
     for (const i in entitiesOrderedList) {
       if (entityClasses.has(entitiesOrderedList[i])) {
@@ -251,6 +256,7 @@ export class StoreWithCache {
   }
 
   private async _flushByClass<E extends Entity>(entityConstructor: EntityClass<E>): Promise<void> {
+
     if (this.cacheStorage.entitiesForFlush.has(entityConstructor)) {
       const forFlush = this.cacheStorage.entitiesForFlush.get(entityConstructor) || new Set<string>();
 

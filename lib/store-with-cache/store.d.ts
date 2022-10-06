@@ -78,8 +78,8 @@ export declare class StoreWithCache {
      * Set/update item in cache by id.
      * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
      */
-    cacheUpsert<T extends CachedModel<T>>(entities: T[]): void;
     cacheUpsert<T extends CachedModel<T>>(entity: T): void;
+    cacheUpsert<T extends CachedModel<T>>(entities: T[]): void;
     /**
      * Load all deferred get from the db, clear deferredLoad and deferredFindWhereList items list,
      * set loaded items to cache storage.
@@ -100,10 +100,6 @@ export declare class StoreWithCache {
      */
     cacheHas<T extends Entity>(entityConstructor: EntityClass<T>, id: string): boolean;
     /**
-     * Get entity by id form cache
-     */
-    cacheGet<T extends Entity>(entityConstructor: EntityClass<T>, id: string): T | null;
-    /**
      * Get all entities of specific class.
      * Returns a new iterator object that contains the values for
      * each element in the Map object in insertion order.
@@ -116,7 +112,7 @@ export declare class StoreWithCache {
     /**
      * Delete entity item from cache storage of the specific class
      */
-    cacheDelete<T extends Entity>(entityConstructor: EntityClass<T>, id: string): void;
+    cacheDelete<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): void;
     /**
      * Delete all entities of specific class from cache storage
      */
@@ -139,6 +135,7 @@ export declare class StoreWithCache {
     private _processFetch;
     save<E extends Entity>(entity: E): Promise<void>;
     save<E extends Entity>(entities: E[]): Promise<void>;
+    private _save;
     private saveMany;
     private getFkSignature;
     private upsertMany;
@@ -151,19 +148,34 @@ export declare class StoreWithCache {
     insert<E extends Entity>(entity: E): Promise<void>;
     insert<E extends Entity>(entities: E[]): Promise<void>;
     /**
-     * Deletes a given entity or entities from the database.
+     * Deletes a given entity or entities from the database with pre-flushing cache content into DB.
      *
      * Unlike {@link EntityManager.remove} executes a primitive DELETE query without cascades, relations, etc.
      */
     remove<E extends Entity>(entity: E): Promise<void>;
     remove<E extends Entity>(entities: E[]): Promise<void>;
     remove<E extends Entity>(entityClass: EntityClass<E>, id: string | string[]): Promise<void>;
+    /**
+     * Deletes a given entity or entities from the database.
+     *
+     * Unlike {@link EntityManager.remove} executes a primitive DELETE query without cascades, relations, etc.
+     */
+    private _remove;
     count<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<number>;
     countBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<number>;
     find<E extends Entity>(entityClass: EntityClass<E>, options?: FindManyOptions<E>): Promise<E[]>;
     findBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E[]>;
     findOne<E extends Entity>(entityClass: EntityClass<E>, options: FindOneOptions<E>): Promise<E | undefined>;
     findOneBy<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E | undefined>;
-    get<E extends Entity>(entityClass: EntityClass<E>, optionsOrId: FindOneOptions<E> | string): Promise<E | undefined>;
+    findOneOrFail<E extends Entity>(entityClass: EntityClass<E>, options: FindOneOptions<E>): Promise<E>;
+    findOneByOrFail<E extends Entity>(entityClass: EntityClass<E>, where: FindOptionsWhere<E> | FindOptionsWhere<E>[]): Promise<E>;
+    /**
+     * Get entity by ID either from cache or DB if cache storage doesn't contain requested item.
+     * @param entityClass
+     * @param id
+     */
+    get<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E | null>;
+    getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E>;
+    private _extractEntityClass;
 }
 //# sourceMappingURL=store.d.ts.map
