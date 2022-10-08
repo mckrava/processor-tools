@@ -268,7 +268,8 @@ export class StoreWithCache {
     recursive: boolean = false
   ): Promise<void> {
     /**
-     * We need save all relations of current class beforehand by relations tree of this class.
+     * We need to save all relations of current class beforehand by relations tree of this class to avoid
+     * "violates foreign key constraint" errors.
      */
     if (recursive) {
       const entitiesRelationsTree = (await this.schemaMetadata.getMetadata(this.em)).entitiesRelationsTree;
