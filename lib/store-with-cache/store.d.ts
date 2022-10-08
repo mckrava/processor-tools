@@ -46,11 +46,13 @@ export declare type CachedModel<T> = {
 export declare class CacheStorage {
     private static instance;
     entities: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
+    entitiesNames: Map<string, EntityClassConstructable>;
     entitiesForFlush: Map<EntityClassConstructable, Set<string>>;
     deferredGetList: Map<EntityClassConstructable, Set<string>>;
     deferredRemoveList: Map<EntityClassConstructable, Set<string>>;
     private constructor();
     static getInstance(): CacheStorage;
+    setEntityName(entityClass: EntityClassConstructable): void;
 }
 export declare class StoreWithCache {
     private em;
@@ -176,6 +178,9 @@ export declare class StoreWithCache {
      */
     get<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E | null>;
     getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E>;
+    /**
+     * :::: UTILITY METHODS :::
+     */
     private _extractEntityClass;
 }
 //# sourceMappingURL=store.d.ts.map

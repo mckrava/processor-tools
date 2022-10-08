@@ -67,6 +67,7 @@ export class CacheStorage {
   private static instance: CacheStorage;
 
   public entities = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>();
+  public entitiesNames = new Map<string, EntityClassConstructable>();
   public entitiesForFlush = new Map<EntityClassConstructable, Set<string>>();
 
   public deferredGetList = new Map<EntityClassConstructable, Set<string>>();
@@ -80,6 +81,10 @@ export class CacheStorage {
     }
     return CacheStorage.instance;
   }
+
+  setEntityName(entityClass: EntityClassConstructable) {
+    this.entitiesNames.set(entityClass.name, entityClass);
+  }
 }
 
 export class StoreWithCache {
@@ -88,7 +93,7 @@ export class StoreWithCache {
     private cacheStorage: CacheStorage,
     private schemaMetadata: SchemaMetadata
   ) {
-    schemaMetadata.getMetadata(em)
+    schemaMetadata.getMetadata(em);
   }
 
   /**
@@ -112,6 +117,8 @@ export class StoreWithCache {
   // deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, findOptions?: FindOptionsWhere<T> | FindOptionsWhere<T>[]): StoreWithCache;
 
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): StoreWithCache {
+    this.cacheStorage.setEntityName(entityConstructor);
+
     if (!idOrList) {
       this.cacheStorage.deferredGetList.set(entityConstructor, new Set<string>().add('*'));
       return this;
@@ -134,6 +141,8 @@ export class StoreWithCache {
    * Cache.get() method.
    */
   deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): StoreWithCache {
+    this.cacheStorage.setEntityName(entityConstructor);
+
     const defRemIdsList = this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set();
 
     for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
@@ -164,6 +173,8 @@ export class StoreWithCache {
       this.cacheStorage.entities.get(entityClassConstructor) || new Map<string, CachedModel<E>>();
     const existingEntitiesForFlush =
       this.cacheStorage.entitiesForFlush.get(entityClassConstructor) || new Set<string>();
+
+    this.cacheStorage.setEntityName(entityClassConstructor);
 
     for (let entity of Array.isArray(entityOrList) ? entityOrList : [entityOrList]) {
       let entityDecorated = entity;
@@ -240,23 +251,34 @@ export class StoreWithCache {
   }
 
   private async _flushAll(): Promise<void> {
-    const entityClasses = new Map<string, EntityClassConstructable>();
+    // const entityClasses = new Map<string, EntityClassConstructable>();
     const entitiesOrderedList = (await this.schemaMetadata.getMetadata(this.em)).entitiesOrderedList;
 
-    console.log('entitiesOrderedList - ', entitiesOrderedList);
-
-
-      [...this.cacheStorage.entities.keys()].forEach(item => entityClasses.set(item.name, item));
+    // [...this.cacheStorage.entities.keys()].forEach(item => entityClasses.set(item.name, item));
 
     for (const i in entitiesOrderedList) {
-      if (entityClasses.has(entitiesOrderedList[i])) {
-        await this._flushByClass(entityClasses.get(entitiesOrderedList[i])!);
+      if (this.cacheStorage.entitiesNames.has(entitiesOrderedList[i])) {
+        await this._flushByClass(this.cacheStorage.entitiesNames.get(entitiesOrderedList[i])!);
       }
     }
   }
 
-  private async _flushByClass<E extends Entity>(entityConstructor: EntityClass<E>): Promise<void> {
-
+  private async _flushByClass<E extends Entity>(
+    entityConstructor: EntityClass<E>,
+    recursive: boolean = false
+  ): Promise<void> {
+    /**
+     * We need save all relations of current class beforehand by relations tree of this class.
+     */
+    if (recursive) {
+      const entitiesRelationsTree = (await this.schemaMetadata.getMetadata(this.em)).entitiesRelationsTree;
+      if (entitiesRelationsTree.has(entityConstructor.name)) {
+        for (const relName of entitiesRelationsTree.get(entityConstructor.name) || []) {
+          if (this.cacheStorage.entitiesNames.has(relName))
+            await this._flushByClass(this.cacheStorage.entitiesNames.get(relName)!, false);
+        }
+      }
+    }
     if (this.cacheStorage.entitiesForFlush.has(entityConstructor)) {
       const forFlush = this.cacheStorage.entitiesForFlush.get(entityConstructor) || new Set<string>();
 
@@ -268,11 +290,12 @@ export class StoreWithCache {
       this.cacheStorage.entitiesForFlush.set(entityConstructor, new Set<string>());
     }
 
-    if (!this.cacheStorage.deferredRemoveList.has(entityConstructor)) return;
-    await this._remove(entityConstructor, [
-      ...(this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set<string>()).values()
-    ]);
-    this.cacheStorage.deferredRemoveList.set(entityConstructor, new Set<string>());
+    if (this.cacheStorage.deferredRemoveList.has(entityConstructor)) {
+      await this._remove(entityConstructor, [
+        ...(this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set<string>()).values()
+      ]);
+      this.cacheStorage.deferredRemoveList.set(entityConstructor, new Set<string>());
+    }
   }
 
   /**
@@ -353,7 +376,10 @@ export class StoreWithCache {
     e: E | E[] | EntityClass<E>,
     fetchCb: () => Promise<RT>
   ): Promise<RT> {
-    await this._flushByClass(this._extractEntityClass(e));
+    const entityClass = this._extractEntityClass(e);
+    this.cacheStorage.setEntityName(entityClass);
+
+    await this._flushByClass(entityClass, true);
     const response = await fetchCb();
 
     if (response !== undefined && typeof response !== 'number') {
@@ -462,18 +488,20 @@ export class StoreWithCache {
   remove<E extends Entity>(entityClass: EntityClass<E>, id: string | string[]): Promise<void>;
   async remove<E extends Entity>(e: E | E[] | EntityClass<E>, id?: string | string[]): Promise<void> {
     if (id && !Array.isArray(e) && !('id' in e)) {
-      await this._flushByClass(e);
+      this.cacheStorage.setEntityName(e);
+      await this._flushByClass(e, true);
       await this._remove(e, id);
       this.cacheDelete(e, id);
     } else if (id == null && ((Array.isArray(e) && 'id' in e[0]) || (!Array.isArray(e) && 'id' in e))) {
       const entityClass = this._extractEntityClass(e);
+      this.cacheStorage.setEntityName(entityClass);
       if (Array.isArray(e)) {
         for (let i = 1; i < e.length; i++) {
           assert(entityClass === e[i].constructor, 'mass deletion allowed only for entities of the same class');
         }
       }
       const idOrList = Array.isArray(e) ? (e as E[]).map(i => i.id) : (e as E).id;
-      await this._flushByClass(entityClass);
+      await this._flushByClass(entityClass, true);
       await this._remove(e as E | E[]);
       this.cacheDelete(entityClass, idOrList);
     } else {
@@ -627,6 +655,10 @@ export class StoreWithCache {
       this._processFetch(entityClass, (): Promise<E> => this.findOneByOrFail(entityClass, { id } as any))
     );
   }
+
+  /**
+   * :::: UTILITY METHODS :::
+   */
 
   private _extractEntityClass<E extends Entity>(e: E | E[] | EntityClass<E>): EntityClass<E> {
     const singleEnOrClass = Array.isArray(e) ? e[0] : e;

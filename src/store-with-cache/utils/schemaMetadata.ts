@@ -6,14 +6,14 @@ class Graph {
   private graphSource: EntityMetadataDecorated[] = [];
   private adjacencyList: Record<string, string[]> = {};
   private topNums: Map<string, number> = new Map();
-  private _vertexesFullChains: Record<string, string[]> = {};
+  private _vertexesTreeFull: Record<string, string[]> = {};
   private _rootVertexesListOrdered: string[] = [];
   private rootVertexCursor: string = '';
 
-  get vertexesFullChains(): Map<string, string[]> {
-    return new Map(Object.entries(this._vertexesFullChains));
+  get vertexesTreeFull(): Map<string, string[]> {
+    return new Map(Object.entries(this._vertexesTreeFull));
   }
-  get sortedGraphListDFS() {
+  get sortedVertexesListDFS() {
     return this._rootVertexesListOrdered;
   }
 
@@ -48,19 +48,19 @@ class Graph {
     this.generateVertexesTree();
   }
 
-  generateVertexesTree(): void {
+  private generateVertexesTree(): void {
     const vertices = Object.keys(this.adjacencyList);
 
     for (const v of vertices) {
       this.rootVertexCursor = v;
-      this._vertexesFullChains[this.rootVertexCursor] = [];
+      this._vertexesTreeFull[this.rootVertexCursor] = [];
 
       this.generateVertexesTreeHelper(v);
     }
 
-    for (const edgeRoot in this._vertexesFullChains) {
-      const list = this._vertexesFullChains[edgeRoot].reverse().filter((x, i, a) => a.indexOf(x) == i);
-      this._vertexesFullChains[edgeRoot] = this._rootVertexesListOrdered.filter(rvl => list.includes(rvl));
+    for (const edgeRoot in this._vertexesTreeFull) {
+      const list = this._vertexesTreeFull[edgeRoot].reverse().filter((x, i, a) => a.indexOf(x) == i);
+      this._vertexesTreeFull[edgeRoot] = this._rootVertexesListOrdered.filter(rvl => list.includes(rvl));
     }
   }
 
@@ -68,13 +68,13 @@ class Graph {
     const neighbors = this.adjacencyList[v];
 
     for (const neighbor of neighbors) {
-      this._vertexesFullChains[this.rootVertexCursor].push(neighbor);
+      this._vertexesTreeFull[this.rootVertexCursor].push(neighbor);
       this.generateVertexesTreeHelper(neighbor);
       // TODO add handler of cyclic
     }
   }
 
-  private sortDFS() {
+  sortDFS() {
     const vertices = Object.keys(this.adjacencyList);
     const visited: Record<string, boolean> = {};
     const visitedTmp: Record<string, boolean> = {};
@@ -117,7 +117,7 @@ class Graph {
 export class SchemaMetadata {
   private _schemaModel: EntityMetadataDecorated[] = [];
   private _entitiesOrderedList: string[] = [];
-  private _entitiesRelationsChains: Map<string, string[]> = new Map();
+  private _entitiesRelationsTree: Map<string, string[]> = new Map();
 
   get schemaModel() {
     return this._schemaModel;
@@ -125,22 +125,20 @@ export class SchemaMetadata {
   get entitiesOrderedList() {
     return this._entitiesOrderedList;
   }
-  get entitiesRelationsChains() {
-    return this._entitiesRelationsChains;
+  get entitiesRelationsTree() {
+    return this._entitiesRelationsTree;
   }
 
   async getMetadata(em: () => Promise<EntityManager>): Promise<SchemaMetadata> {
     if (this._schemaModel.length > 0) return Promise.resolve(this);
     const emInst = await em();
     this._schemaModel = emInst.connection.entityMetadatas.map(mdItem => {
-      console.log('mdItem - ', mdItem);
       return {
         entityName: mdItem.name,
         hasNonNullableRelations: mdItem.hasNonNullableRelations,
         foreignKeys: mdItem.foreignKeys.map(item => item.referencedEntityMetadata.name)
       };
     });
-    console.log('====================================');
     this.generateEntitiesOrderedList();
     return this;
   }
@@ -149,7 +147,7 @@ export class SchemaMetadata {
     const graph = new Graph();
     graph.schemeMetadataToFkGraph(this._schemaModel);
     graph.generateSortedData();
-    this._entitiesOrderedList = graph.sortedGraphListDFS;
-    this._entitiesRelationsChains = graph.vertexesFullChains;
+    this._entitiesOrderedList = graph.sortedVertexesListDFS;
+    this._entitiesRelationsTree = graph.vertexesTreeFull;
   }
 }
