@@ -1,16 +1,19 @@
-import { EntityManager } from 'typeorm';
 declare type EntityMetadataDecorated = {
     entityName: string;
-    foreignKeys: string[];
+    foreignKeys: {
+        entityName: string;
+        isNullable: boolean;
+    }[];
 };
 export declare class SchemaMetadata {
     private _schemaModel;
     private _entitiesOrderedList;
     private _entitiesRelationsTree;
+    constructor();
     get schemaModel(): EntityMetadataDecorated[];
     get entitiesOrderedList(): string[];
     get entitiesRelationsTree(): Map<string, string[]>;
-    getMetadata(em: () => Promise<EntityManager>): Promise<SchemaMetadata>;
+    processSchema(): SchemaMetadata;
     generateEntitiesOrderedList(): void;
 }
 export {};

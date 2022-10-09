@@ -92,9 +92,7 @@ export class StoreWithCache {
     private em: () => Promise<EntityManager>,
     private cacheStorage: CacheStorage,
     private schemaMetadata: SchemaMetadata
-  ) {
-    schemaMetadata.getMetadata(em);
-  }
+  ) {}
 
   /**
    * Add request for loading all entities of defined class.
@@ -252,13 +250,12 @@ export class StoreWithCache {
 
   private async _flushAll(): Promise<void> {
     // const entityClasses = new Map<string, EntityClassConstructable>();
-    const entitiesOrderedList = (await this.schemaMetadata.getMetadata(this.em)).entitiesOrderedList;
 
     // [...this.cacheStorage.entities.keys()].forEach(item => entityClasses.set(item.name, item));
 
-    for (const i in entitiesOrderedList) {
-      if (this.cacheStorage.entitiesNames.has(entitiesOrderedList[i])) {
-        await this._flushByClass(this.cacheStorage.entitiesNames.get(entitiesOrderedList[i])!);
+    for (const i in this.schemaMetadata.entitiesOrderedList) {
+      if (this.cacheStorage.entitiesNames.has(this.schemaMetadata.entitiesOrderedList[i])) {
+        await this._flushByClass(this.cacheStorage.entitiesNames.get(this.schemaMetadata.entitiesOrderedList[i])!);
       }
     }
   }
@@ -272,9 +269,8 @@ export class StoreWithCache {
      * "violates foreign key constraint" errors.
      */
     if (recursive) {
-      const entitiesRelationsTree = (await this.schemaMetadata.getMetadata(this.em)).entitiesRelationsTree;
-      if (entitiesRelationsTree.has(entityConstructor.name)) {
-        for (const relName of entitiesRelationsTree.get(entityConstructor.name) || []) {
+      if (this.schemaMetadata.entitiesRelationsTree.has(entityConstructor.name)) {
+        for (const relName of this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name) || []) {
           if (this.cacheStorage.entitiesNames.has(relName))
             await this._flushByClass(this.cacheStorage.entitiesNames.get(relName)!, false);
         }
