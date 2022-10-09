@@ -22,9 +22,6 @@ export interface FindOneOptions<Entity = any> {
      */
     where?: FindOptionsWhere<Entity>[] | FindOptionsWhere<Entity>;
     /**
-     * Indicates what relations of entity should be loaded (simplified left join form).
-     */
-    /**
      * Order, in which entities should be ordered.
      */
     order?: FindOptionsOrder<Entity>;

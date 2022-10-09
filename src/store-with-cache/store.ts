@@ -31,10 +31,6 @@ export interface FindOneOptions<Entity = any> {
    */
   where?: FindOptionsWhere<Entity>[] | FindOptionsWhere<Entity>;
   /**
-   * Indicates what relations of entity should be loaded (simplified left join form).
-   */
-  // relations?: FindOptionsRelations<Entity>;
-  /**
    * Order, in which entities should be ordered.
    */
   order?: FindOptionsOrder<Entity>;
@@ -52,8 +48,6 @@ export interface FindManyOptions<Entity = any> extends FindOneOptions<Entity> {
 }
 
 export type EntityClassConstructable = EntityClass<Entity>;
-
-// export type CacheEntityParams = EntityClassConstructable | [EntityClassConstructable, Record<keyof EntityClassConstructable, EntityClassConstructable>]; // Inherited from FindOneOptions['loadRelationIds']['relations']
 
 export type CachedModel<T> = {
   [P in keyof T]: Exclude<T[P], null | undefined> extends Entity
@@ -160,9 +154,7 @@ export class StoreWithCache {
     return this;
   }
 
-  // private _upsert<E extends CachedModel<E>>(entity: E, setForFlush: boolean): void;
-  // private _upsert<E extends CachedModel<E>>(entities: E[], setForFlush: boolean): void;
-  private _upsert<E extends CachedModel<E>>(entityOrList: E | E[], setForFlush: boolean): void {
+  private _upsert<E extends CachedModel<E>>(entityOrList: CachedModel<E> | CachedModel<E>[], setForFlush: boolean): void {
     if (Array.isArray(entityOrList) && entityOrList.length === 0) return;
 
     const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
@@ -177,7 +169,7 @@ export class StoreWithCache {
     for (let entity of Array.isArray(entityOrList) ? entityOrList : [entityOrList]) {
       let entityDecorated = entity;
       for (const entityFieldName in entity) {
-        let fieldValue = entity[entityFieldName];
+        let fieldValue = entity[entityFieldName as keyof CachedModel<E>];
 
         if (fieldValue !== null && typeof fieldValue === 'object' && !Array.isArray(fieldValue) && 'id' in fieldValue) {
           const fieldValueDecorated = fieldValue as unknown as Entity;
@@ -249,9 +241,6 @@ export class StoreWithCache {
   }
 
   private async _flushAll(): Promise<void> {
-    // const entityClasses = new Map<string, EntityClassConstructable>();
-
-    // [...this.cacheStorage.entities.keys()].forEach(item => entityClasses.set(item.name, item));
 
     for (const i in this.schemaMetadata.entitiesOrderedList) {
       if (this.cacheStorage.entitiesNames.has(this.schemaMetadata.entitiesOrderedList[i])) {
@@ -362,13 +351,6 @@ export class StoreWithCache {
    * ::: TypeORM Store methods :::
    */
 
-  // private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<number>): Promise<number>;
-  // private _processFetch<E extends Entity>(entityClass: EntityClass<E>, fetchCb: () => Promise<E[]>): Promise<E[]>;
-  // private _processFetch<E extends Entity>(
-  //   entityClass: EntityClass<E>,
-  //   fetchCb: () => Promise<E | undefined>
-  // ): Promise<E | undefined>;
-
   private async _processFetch<E extends Entity, RT extends E[] | E | undefined | number>(
     e: E | E[] | EntityClass<E>,
     fetchCb: () => Promise<RT>
@@ -380,8 +362,7 @@ export class StoreWithCache {
     const response = await fetchCb();
 
     if (response !== undefined && typeof response !== 'number') {
-      //@ts-ignore
-      this._upsert(response as CachedModel<E>[] | CachedModel<E>, false);
+      this._upsert(response as E | E[], false);
     }
     return response; // TODO should be returned the same entity instance as located in local cache store
   }
@@ -391,7 +372,7 @@ export class StoreWithCache {
   save<E extends Entity>(entity: E): Promise<void>;
   save<E extends Entity>(entities: E[]): Promise<void>;
   async save<E extends Entity>(e: E | E[]): Promise<void> {
-    //@ts-ignore
+
     this._upsert(e, false);
     await this._save(e);
   }
@@ -456,7 +437,7 @@ export class StoreWithCache {
   insert<E extends Entity>(entity: E): Promise<void>;
   insert<E extends Entity>(entities: E[]): Promise<void>;
   async insert<E extends Entity>(e: E | E[]): Promise<void> {
-    // @ts-ignore
+
     this._upsert(e, false);
     if (Array.isArray(e)) {
       if (e.length == 0) return;
@@ -511,9 +492,6 @@ export class StoreWithCache {
    *
    * Unlike {@link EntityManager.remove} executes a primitive DELETE query without cascades, relations, etc.
    */
-  // private _remove<E extends Entity>(entity: E): Promise<void>;
-  // private _remove<E extends Entity>(entities: E[]): Promise<void>;
-  // private _remove<E extends Entity>(entityClass: EntityClass<E>, id?: string | string[]): Promise<void>;
   private async _remove<E extends Entity>(e: E | E[] | EntityClass<E>, id?: string | string[]): Promise<void> {
     if (id == null) {
       if (Array.isArray(e)) {
