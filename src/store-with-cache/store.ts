@@ -185,10 +185,11 @@ export class StoreWithCache {
    * Set/update item in cache by id.
    * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
    */
-  deferredUpsert<T extends CachedModel<T>>(entity: T): void;
-  deferredUpsert<T extends CachedModel<T>>(entities: T[]): void;
-  deferredUpsert<T extends CachedModel<T>>(e: T | T[]): void {
+  deferredUpsert<T extends CachedModel<T>>(entity: T): StoreWithCache;
+  deferredUpsert<T extends CachedModel<T>>(entities: T[]): StoreWithCache;
+  deferredUpsert<T extends CachedModel<T>>(e: T | T[]): StoreWithCache {
     this._upsert(e, true);
+    return this;
   }
 
   /**
