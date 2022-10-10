@@ -226,7 +226,7 @@ class Graph {
 
       for (const subNeighbor of subNeighbors) {
         if (visitedTmp[subNeighbor]) {
-          if (this.graphSource.get(subNeighbor)!.foreignKeys.get(neighbor)!.isNullable) {
+          if (this.graphSource.get(neighbor)!.foreignKeys.get(subNeighbor)!.isNullable) {
             visitedTmp[neighbor] = true;
             this._vertexesTreeFull[this.rootVertexCursor].push(neighbor);
             continue neighborLoop;
