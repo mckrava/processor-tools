@@ -21,7 +21,7 @@ class BaseDatabase<S> {
 
   constructor(options?: TypeormDatabaseOptions) {
     this.statusSchema = options?.stateSchema ? `"${options.stateSchema}"` : 'squid_processor';
-    this.isolationLevel = options?.isolationLevel || 'SERIALIZABLE';
+    this.isolationLevel = 'SERIALIZABLE';
   }
 
   async connect(): Promise<number> {
