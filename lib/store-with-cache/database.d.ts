@@ -35,7 +35,7 @@ declare class BaseDatabase<S> {
 export declare class TypeormDatabaseWithCache extends BaseDatabase<StoreWithCache> {
     schemaMetadata: SchemaMetadata;
     cacheStorage: CacheStorage;
-    constructor();
+    constructor(options?: TypeormDatabaseOptions);
     protected runTransaction(from: number, to: number, cb: (store: StoreWithCache) => Promise<void>): Promise<void>;
     private createTx;
     advance(height: number): Promise<void>;

@@ -1,7 +1,6 @@
 import { loadModel, resolveGraphqlSchema } from '@subsquid/openreader/lib/tools';
+import { renderLogs } from './innerUtils';
 import { Model } from '@subsquid/openreader/src/model';
-
-import { EntityManager } from 'typeorm';
 
 type EntityMetadataDecorated = { entityName: string; foreignKeys: { entityName: string; isNullable: boolean }[] };
 type GraphSourceMetadata = Map<
@@ -212,6 +211,7 @@ class Graph {
 
   private generateVertexesTreeHelper(v: string, visitedTmp: Record<string, boolean>) {
     const neighbors = this.adjacencyList[v];
+
     neighborLoop: for (const neighbor of neighbors) {
       if (visitedTmp[neighbor]) {
         if (this.graphSource.get(v)!.foreignKeys.get(neighbor)!.isNullable) {
@@ -226,8 +226,7 @@ class Graph {
 
       for (const subNeighbor of subNeighbors) {
         if (visitedTmp[subNeighbor]) {
-          if (this.graphSource.get(neighbor)!.foreignKeys.get(subNeighbor)!.isNullable) {
-            visitedTmp[neighbor] = true;
+          if (this.graphSource.get(v)!.foreignKeys.get(neighbor)!.isNullable) {
             this._vertexesTreeFull[this.rootVertexCursor].push(neighbor);
             continue neighborLoop;
           }
@@ -263,7 +262,7 @@ export class SchemaMetadata {
   }
 
   processSchema(): SchemaMetadata {
-    let model = loadModel(resolveGraphqlSchema());
+    let model: Model = loadModel(resolveGraphqlSchema());
 
     for (const name in model) {
       const item = model[name];
@@ -296,5 +295,11 @@ export class SchemaMetadata {
     graph.generateSortedData();
     this._entitiesOrderedList = graph.sortedVertexesListBFS;
     this._entitiesRelationsTree = graph.vertexesTreeFull;
+    renderLogs(`schemaModel => ${JSON.stringify(this._schemaModel)}`, 'schema_metadata');
+    renderLogs(`entitiesOrderedList => ${JSON.stringify(graph.sortedVertexesListBFS)}`, 'schema_metadata');
+    renderLogs(
+      `entitiesRelationsTree => ${JSON.stringify(Object.fromEntries(graph.vertexesTreeFull))}`,
+      'schema_metadata'
+    );
   }
 }

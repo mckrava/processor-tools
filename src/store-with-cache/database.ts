@@ -118,8 +118,8 @@ export class TypeormDatabaseWithCache extends BaseDatabase<StoreWithCache> {
   schemaMetadata: SchemaMetadata;
   cacheStorage: CacheStorage;
 
-  constructor() {
-    super();
+  constructor(options?: TypeormDatabaseOptions) {
+    super(options);
     this.schemaMetadata = new SchemaMetadata();
     this.cacheStorage = CacheStorage.getInstance();
   }
