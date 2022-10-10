@@ -77,8 +77,8 @@ export declare class StoreWithCache {
      * Set/update item in cache by id.
      * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
      */
-    cacheUpsert<T extends CachedModel<T>>(entity: T): void;
-    cacheUpsert<T extends CachedModel<T>>(entities: T[]): void;
+    deferredUpsert<T extends CachedModel<T>>(entity: T): void;
+    deferredUpsert<T extends CachedModel<T>>(entities: T[]): void;
     /**
      * Load all deferred get from the db, clear deferredLoad and deferredFindWhereList items list,
      * set loaded items to cache storage.
@@ -91,43 +91,43 @@ export declare class StoreWithCache {
      * execution of ".delete || .clear || .deferredRemove" methods. But as cache store doesn't contain removed items,
      * they won't be accidentally saved into DB.
      */
-    cacheFlush(): Promise<void>;
+    flush(): Promise<void>;
     private _flushAll;
     private _flushByClass;
     /**
+     * Delete entity item from cache storage of the specific class
+     */
+    private _cacheDelete;
+    /**
      * Check by ID if entity is existing in cache
      */
-    cacheHas<T extends Entity>(entityConstructor: EntityClass<T>, id: string): boolean;
+    has<T extends Entity>(entityConstructor: EntityClass<T>, id: string): boolean;
     /**
      * Get all entities of specific class.
      * Returns a new iterator object that contains the values for
      * each element in the Map object in insertion order.
      */
-    cacheValues<T extends Entity>(entityConstructor: EntityClass<T>): IterableIterator<T> | [];
+    values<T extends Entity>(entityConstructor: EntityClass<T>): IterableIterator<T> | [];
     /**
      * Returns full cache data
      */
-    cacheEntries(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
-    /**
-     * Delete entity item from cache storage of the specific class
-     */
-    cacheDelete<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): void;
+    entries(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
     /**
      * Delete all entities of specific class from cache storage
      */
-    cacheClear<T extends Entity>(entityConstructor: EntityClass<T>): void;
+    clear<T extends Entity>(entityConstructor: EntityClass<T>): void;
     /**
      * Purge current cache.
      */
-    cachePurge(): void;
+    purge(): void;
     /**
      * If there are unresolved gets
      */
-    cacheReady(): boolean;
+    ready(): boolean;
     /**
-     * If there were upsets after Cache.load()
+     * If there were upsets after .load()
      */
-    cacheIsDirty(): boolean;
+    isDirty(): boolean;
     /**
      * ::: TypeORM Store methods :::
      */

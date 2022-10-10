@@ -97,16 +97,6 @@ export class StoreWithCache {
    * (keeps items as Map structure).
    */
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): StoreWithCache;
-  /**
-   * Add requests for find entities by "FindManyOptions" parameters.
-   * Can be useful if user needs fetch list of entities by id with
-   * additional check for "soft remove" flag (e.g. additional field
-   * "deleted: true" or "active: false")
-   */
-  // TODO theoretically won't be used as original .find***() method
-  //  can be used which will save results into local cache store
-  //  underhood.
-  // deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, findOptions?: FindOptionsWhere<T> | FindOptionsWhere<T>[]): StoreWithCache;
 
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): StoreWithCache {
     this.cacheStorage.setEntityName(entityConstructor);
@@ -154,7 +144,10 @@ export class StoreWithCache {
     return this;
   }
 
-  private _upsert<E extends CachedModel<E>>(entityOrList: CachedModel<E> | CachedModel<E>[], setForFlush: boolean): void {
+  private _upsert<E extends CachedModel<E>>(
+    entityOrList: CachedModel<E> | CachedModel<E>[],
+    setForFlush: boolean
+  ): void {
     if (Array.isArray(entityOrList) && entityOrList.length === 0) return;
 
     const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
@@ -192,9 +185,9 @@ export class StoreWithCache {
    * Set/update item in cache by id.
    * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
    */
-  cacheUpsert<T extends CachedModel<T>>(entity: T): void;
-  cacheUpsert<T extends CachedModel<T>>(entities: T[]): void;
-  cacheUpsert<T extends CachedModel<T>>(e: T | T[]): void {
+  deferredUpsert<T extends CachedModel<T>>(entity: T): void;
+  deferredUpsert<T extends CachedModel<T>>(entities: T[]): void;
+  deferredUpsert<T extends CachedModel<T>>(e: T | T[]): void {
     this._upsert(e, true);
   }
 
@@ -235,13 +228,12 @@ export class StoreWithCache {
    * execution of ".delete || .clear || .deferredRemove" methods. But as cache store doesn't contain removed items,
    * they won't be accidentally saved into DB.
    */
-  async cacheFlush(): Promise<void> {
+  async flush(): Promise<void> {
     await this._flushAll();
     this.cacheStorage.deferredRemoveList.clear();
   }
 
   private async _flushAll(): Promise<void> {
-
     for (const i in this.schemaMetadata.entitiesOrderedList) {
       if (this.cacheStorage.entitiesNames.has(this.schemaMetadata.entitiesOrderedList[i])) {
         await this._flushByClass(this.cacheStorage.entitiesNames.get(this.schemaMetadata.entitiesOrderedList[i])!);
@@ -285,9 +277,19 @@ export class StoreWithCache {
   }
 
   /**
+   * Delete entity item from cache storage of the specific class
+   */
+  private _cacheDelete<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): void {
+    if (!this.cacheStorage.entities.has(entityConstructor)) return;
+    for (const id of Array.isArray(idOrList) ? idOrList : [idOrList]) {
+      this.cacheStorage.entities.get(entityConstructor)!.delete(id);
+    }
+  }
+
+  /**
    * Check by ID if entity is existing in cache
    */
-  cacheHas<T extends Entity>(entityConstructor: EntityClass<T>, id: string): boolean {
+  has<T extends Entity>(entityConstructor: EntityClass<T>, id: string): boolean {
     return (this.cacheStorage.entities.get(entityConstructor) || new Map()).has(id);
   }
 
@@ -296,31 +298,21 @@ export class StoreWithCache {
    * Returns a new iterator object that contains the values for
    * each element in the Map object in insertion order.
    */
-  cacheValues<T extends Entity>(entityConstructor: EntityClass<T>): IterableIterator<T> | [] {
+  values<T extends Entity>(entityConstructor: EntityClass<T>): IterableIterator<T> | [] {
     return (this.cacheStorage.entities.get(entityConstructor) || new Map()).values() || null;
   }
 
   /**
    * Returns full cache data
    */
-  cacheEntries(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>> {
+  entries(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>> {
     return this.cacheStorage.entities;
-  }
-
-  /**
-   * Delete entity item from cache storage of the specific class
-   */
-  cacheDelete<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): void {
-    if (!this.cacheStorage.entities.has(entityConstructor)) return;
-    for (const id of Array.isArray(idOrList) ? idOrList : [idOrList]) {
-      this.cacheStorage.entities.get(entityConstructor)!.delete(id);
-    }
   }
 
   /**
    * Delete all entities of specific class from cache storage
    */
-  cacheClear<T extends Entity>(entityConstructor: EntityClass<T>): void {
+  clear<T extends Entity>(entityConstructor: EntityClass<T>): void {
     if (!this.cacheStorage.entities.has(entityConstructor)) return;
     this.cacheStorage.entities.get(entityConstructor)!.clear();
   }
@@ -328,23 +320,22 @@ export class StoreWithCache {
   /**
    * Purge current cache.
    */
-  cachePurge(): void {
+  purge(): void {
     this.cacheStorage.entities.clear();
   }
 
   /**
    * If there are unresolved gets
    */
-  cacheReady(): boolean {
-    return false;
+  ready(): boolean {
+    return this.cacheStorage.deferredGetList.size === 0 && this.cacheStorage.deferredRemoveList.size === 0;
   }
 
   /**
-   * If there were upsets after Cache.load()
+   * If there were upsets after .load()
    */
-  cacheIsDirty(): boolean {
-    // return this.cacheStorage.deferredGetList.size > 0 || this.deferredFindWhereList.size > 0;
-    return this.cacheStorage.deferredGetList.size > 0;
+  isDirty(): boolean {
+    return this.cacheStorage.entitiesForFlush.size > 0;
   }
 
   /**
@@ -364,20 +355,15 @@ export class StoreWithCache {
     if (response !== undefined && typeof response !== 'number') {
       this._upsert(response as E | E[], false);
     }
-    return response; // TODO should be returned the same entity instance as located in local cache store
+    return response;
   }
-
-  // ================================================================================
 
   save<E extends Entity>(entity: E): Promise<void>;
   save<E extends Entity>(entities: E[]): Promise<void>;
   async save<E extends Entity>(e: E | E[]): Promise<void> {
-
     this._upsert(e, false);
     await this._save(e);
   }
-  // private _save<E extends Entity>(entity: E): Promise<void>;
-  // private _save<E extends Entity>(entities: E[]): Promise<void>;
   private async _save<E extends Entity>(e: E | E[]): Promise<void> {
     if (Array.isArray(e)) {
       if (e.length == 0) return;
@@ -437,7 +423,6 @@ export class StoreWithCache {
   insert<E extends Entity>(entity: E): Promise<void>;
   insert<E extends Entity>(entities: E[]): Promise<void>;
   async insert<E extends Entity>(e: E | E[]): Promise<void> {
-
     this._upsert(e, false);
     if (Array.isArray(e)) {
       if (e.length == 0) return;
@@ -469,7 +454,7 @@ export class StoreWithCache {
       this.cacheStorage.setEntityName(e);
       await this._flushByClass(e, true);
       await this._remove(e, id);
-      this.cacheDelete(e, id);
+      this._cacheDelete(e, id);
     } else if (id == null && ((Array.isArray(e) && 'id' in e[0]) || (!Array.isArray(e) && 'id' in e))) {
       const entityClass = this._extractEntityClass(e);
       this.cacheStorage.setEntityName(entityClass);
@@ -481,7 +466,7 @@ export class StoreWithCache {
       const idOrList = Array.isArray(e) ? (e as E[]).map(i => i.id) : (e as E).id;
       await this._flushByClass(entityClass, true);
       await this._remove(e as E | E[]);
-      this.cacheDelete(entityClass, idOrList);
+      this._cacheDelete(entityClass, idOrList);
     } else {
       return;
     }
