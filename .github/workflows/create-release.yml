@@ -46,7 +46,7 @@ jobs:
       # Cancel Release workflow if pull request head branch is not `release`.
       - name: "Cancel workflow"
         if: steps.check-pr-head-branch-name.outputs.result == false
-        uses: styfle/cancel-workflow-action@0.9.1
+        uses: styfle/cancel-workflow-action@0.10.1
         with:
           access_token: ${{ secrets.GH_TOKEN }}
 
@@ -59,7 +59,7 @@ jobs:
 
       - name: 'Extract app version'
         id: package-version
-        uses: Saionaro/extract-package-version@v1.0.6
+        uses: Saionaro/extract-package-version@v1.1.1
 
       - name: 'Create release tag'
         run: |
@@ -89,7 +89,7 @@ jobs:
 
       - name: "Create back-merge pull request into develop"
         id: back-merge-main-develop-pr
-        uses: thomaseizinger/create-pull-request@1.0.0
+        uses: thomaseizinger/create-pull-request@1.2.2
         with:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           head: main

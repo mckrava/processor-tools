@@ -102,7 +102,7 @@ jobs:
       # As alternative actions can be use this one - martinbeentjes/npm-get-version-action@main
       - name: 'Extract version'
         id: package-version
-        uses: Saionaro/extract-package-version@v1.0.6
+        uses: Saionaro/extract-package-version@v1.1.1
 
       # Stash updated files (CHANGELOG.md and package.json) for further applying into new release/vX.X.X branch.
       # Such steps order is required because we need a new version value for creation of a new release branch. Therefore,
@@ -128,7 +128,7 @@ jobs:
           git push origin release/v${{ steps.package-version.outputs.version }}
 
       - name: "Create pull request into main"
-        uses: thomaseizinger/create-pull-request@1.0.0
+        uses: thomaseizinger/create-pull-request@1.2.2
         with:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           head: release/v${{ steps.package-version.outputs.version }}
