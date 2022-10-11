@@ -4,7 +4,6 @@ import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata';
 import assert from 'assert';
 import { BatchContext } from '@subsquid/substrate-processor';
 import { SchemaMetadata } from './utils/schemaMetadata';
-import { option } from 'fast-check';
 
 export { TypeormDatabase, FullTypeormDatabase, IsolationLevel } from '@subsquid/typeorm-store';
 

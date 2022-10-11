@@ -1,5 +1,4 @@
 import { loadModel, resolveGraphqlSchema } from '@subsquid/openreader/lib/tools';
-import { renderLogs } from './innerUtils';
 import { Model } from '@subsquid/openreader/src/model';
 import { createLogger, Logger } from '@subsquid/logger';
 
@@ -40,11 +39,25 @@ class Graph {
   schemeMetadataToFkGraph(metadata: EntityMetadataDecorated[]) {
     this.graphSource = new Map(
       metadata.map(el => {
+        const fksNullability = new Map<string, boolean>();
+        for (const fk of el.foreignKeys) {
+          if (!fksNullability.has(fk.entityName)) {
+            fksNullability.set(fk.entityName, fk.isNullable);
+          } else {
+            if (fksNullability.get(fk.entityName)) fksNullability.set(fk.entityName, fk.isNullable);
+          }
+        }
+
         return [
           el.entityName,
           {
             entityName: el.entityName,
-            foreignKeys: new Map(el.foreignKeys.map(fk => [fk.entityName, fk]))
+            foreignKeys: new Map(
+              el.foreignKeys.map(fk => [
+                fk.entityName,
+                { ...fk, isNullable: fksNullability.get(fk.entityName) ?? false }
+              ])
+            )
           }
         ];
       })
