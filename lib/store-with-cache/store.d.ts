@@ -51,7 +51,7 @@ export declare class CacheStorage {
     static getInstance(): CacheStorage;
     setEntityName(entityClass: EntityClassConstructable): void;
 }
-export declare class StoreWithCache {
+export declare class Store {
     private em;
     private cacheStorage;
     private schemaMetadata;
@@ -59,26 +59,26 @@ export declare class StoreWithCache {
     /**
      * Add request for loading all entities of defined class.
      */
-    deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>): StoreWithCache;
+    deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>): Store;
     /**
      * Add ids of entities which should be loaded, resolved after Cache.load()
      * (keeps items as Map structure).
      */
-    deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): StoreWithCache;
+    deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): Store;
     /**
      * Add ids of entities which should be removed, resolved after Cache.flush()
      * Keeps items as Map structure.
      * If item is added to the list for deferredRemove, it will be removed from local cache and won't be available for
      * Cache.get() method.
      */
-    deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): StoreWithCache;
+    deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): Store;
     private _upsert;
     /**
      * Set/update item in cache by id.
      * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
      */
-    deferredUpsert<T extends CachedModel<T>>(entity: T): StoreWithCache;
-    deferredUpsert<T extends CachedModel<T>>(entities: T[]): StoreWithCache;
+    deferredUpsert<T extends CachedModel<T>>(entity: T): Store;
+    deferredUpsert<T extends CachedModel<T>>(entities: T[]): Store;
     /**
      * Load all deferred get from the db, clear deferredLoad and deferredFindWhereList items list,
      * set loaded items to cache storage.

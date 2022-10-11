@@ -1,6 +1,7 @@
 import { loadModel, resolveGraphqlSchema } from '@subsquid/openreader/lib/tools';
 import { renderLogs } from './innerUtils';
 import { Model } from '@subsquid/openreader/src/model';
+import { createLogger, Logger } from '@subsquid/logger';
 
 type EntityMetadataDecorated = { entityName: string; foreignKeys: { entityName: string; isNullable: boolean }[] };
 type GraphSourceMetadata = Map<
@@ -290,16 +291,15 @@ export class SchemaMetadata {
   }
 
   generateEntitiesOrderedList() {
+    let logger: Logger = createLogger('sqd:store').child('schema_metadata');
     const graph = new Graph();
     graph.schemeMetadataToFkGraph(this._schemaModel);
     graph.generateSortedData();
     this._entitiesOrderedList = graph.sortedVertexesListBFS;
     this._entitiesRelationsTree = graph.vertexesTreeFull;
-    renderLogs(`schemaModel => ${JSON.stringify(this._schemaModel)}`, 'schema_metadata');
-    renderLogs(`entitiesOrderedList => ${JSON.stringify(graph.sortedVertexesListBFS)}`, 'schema_metadata');
-    renderLogs(
-      `entitiesRelationsTree => ${JSON.stringify(Object.fromEntries(graph.vertexesTreeFull))}`,
-      'schema_metadata'
-    );
+
+    logger.trace(this._schemaModel, `schemaModel`);
+    logger.trace(graph.sortedVertexesListBFS, `entitiesOrderedList`);
+    logger.trace(Object.fromEntries(graph.vertexesTreeFull), `entitiesRelationsTree`);
   }
 }

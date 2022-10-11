@@ -81,7 +81,7 @@ export class CacheStorage {
   }
 }
 
-export class StoreWithCache {
+export class Store {
   constructor(
     private em: () => Promise<EntityManager>,
     private cacheStorage: CacheStorage,
@@ -91,14 +91,14 @@ export class StoreWithCache {
   /**
    * Add request for loading all entities of defined class.
    */
-  deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>): StoreWithCache;
+  deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>): Store;
   /**
    * Add ids of entities which should be loaded, resolved after Cache.load()
    * (keeps items as Map structure).
    */
-  deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): StoreWithCache;
+  deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): Store;
 
-  deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): StoreWithCache {
+  deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): Store {
     this.cacheStorage.setEntityName(entityConstructor);
 
     if (!idOrList) {
@@ -122,7 +122,7 @@ export class StoreWithCache {
    * If item is added to the list for deferredRemove, it will be removed from local cache and won't be available for
    * Cache.get() method.
    */
-  deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): StoreWithCache {
+  deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): Store {
     this.cacheStorage.setEntityName(entityConstructor);
 
     const defRemIdsList = this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set();
@@ -185,9 +185,9 @@ export class StoreWithCache {
    * Set/update item in cache by id.
    * All items which are upserted by this method will be saved into DB during further execution of ".flush" method
    */
-  deferredUpsert<T extends CachedModel<T>>(entity: T): StoreWithCache;
-  deferredUpsert<T extends CachedModel<T>>(entities: T[]): StoreWithCache;
-  deferredUpsert<T extends CachedModel<T>>(e: T | T[]): StoreWithCache {
+  deferredUpsert<T extends CachedModel<T>>(entity: T): Store;
+  deferredUpsert<T extends CachedModel<T>>(entities: T[]): Store;
+  deferredUpsert<T extends CachedModel<T>>(e: T | T[]): Store {
     this._upsert(e, true);
     return this;
   }
