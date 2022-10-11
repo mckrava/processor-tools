@@ -102,7 +102,7 @@ jobs:
       # As alternative actions can be use this one - martinbeentjes/npm-get-version-action@main
       - name: 'Extract version'
         id: package-version
-        uses: Saionaro/extract-package-version@v1.1.1
+        uses: martinbeentjes/npm-get-version-action@main
 
       # Stash updated files (CHANGELOG.md and package.json) for further applying into new release/vX.X.X branch.
       # Such steps order is required because we need a new version value for creation of a new release branch. Therefore,
@@ -111,7 +111,7 @@ jobs:
         run: git stash
 
       - name: 'Create release branch'
-        run: git checkout -b release/v${{ steps.package-version.outputs.version }}
+        run: git checkout -b release/v${{ steps.package-version.outputs.current-version }}
 
       - name: 'Apply stash'
         run: git stash pop
@@ -123,17 +123,17 @@ jobs:
         run: |
           git add package.json
           git add CHANGELOG.md
-          git commit --message "Prepare release ${{ steps.package-version.outputs.version }}"
+          git commit --message "Prepare release ${{ steps.package-version.outputs.current-version }}"
           echo "::set-output name=commit::$(git rev-parse HEAD)"
-          git push origin release/v${{ steps.package-version.outputs.version }}
+          git push origin release/v${{ steps.package-version.outputs.current-version }}
 
       - name: "Create pull request into main"
         uses: thomaseizinger/create-pull-request@1.2.2
         with:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          head: release/v${{ steps.package-version.outputs.version }}
+          head: release/v${{ steps.package-version.outputs.current-version }}
           base: main
-          title: v${{ steps.package-version.outputs.version }} into main
+          title: v${{ steps.package-version.outputs.current-version }} into main
           reviewers: ${{ github.event.issue.user.login }}
           body: |
             This PR was created in response Release workflow running.

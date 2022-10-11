@@ -59,12 +59,12 @@ jobs:
 
       - name: 'Extract app version'
         id: package-version
-        uses: Saionaro/extract-package-version@v1.1.1
+        uses: martinbeentjes/npm-get-version-action@main
 
       - name: 'Create release tag'
         run: |
-          git tag -a "v${{ steps.package-version.outputs.version }}" -m "Release v${{ steps.package-version.outputs.version }}" main
-          git push origin "v${{ steps.package-version.outputs.version }}"
+          git tag -a "v${{ steps.package-version.outputs.current-version }}" -m "Release v${{ steps.package-version.outputs.current-version }}" main
+          git push origin "v${{ steps.package-version.outputs.current-version }}"
 
       # Extract release notes from CHANGELOG.md for specific version with mckrava/standard-version-release-notes@v1.1.0
       # (https://github.com/marketplace/actions/get-release-notes-from-standard-version-changelog)
@@ -72,7 +72,7 @@ jobs:
         id: generate_release_notes
         uses: mckrava/standard-version-release-notes@v1.1.0
         with:
-          tag_name: v${{ steps.package-version.outputs.version }}
+          tag_name: v${{ steps.package-version.outputs.current-version }}
           changelog: CHANGELOG.md
 
       - name: 'Create Release'
@@ -80,8 +80,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ steps.package-version.outputs.version }}
-          release_name: v${{ steps.package-version.outputs.version }}
+          tag_name: v${{ steps.package-version.outputs.current-version }}
+          release_name: v${{ steps.package-version.outputs.current-version }}
           body: ${{join(fromJson(steps.generate_release_notes.outputs.notes).notes, '')}}
           draft: false
           prerelease: false
@@ -94,7 +94,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           head: main
           base: develop
-          title: Back-merge main into develop after Release v${{ steps.package-version.outputs.version }}
+          title: Back-merge main into develop after Release v${{ steps.package-version.outputs.current-version }}
           reviewers: ${{ github.event.issue.user.login }}
           body: |
             This PR was created in response Release workflow running.
