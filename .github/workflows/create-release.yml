@@ -24,7 +24,7 @@ jobs:
     if: github.event.pull_request.merged == true
     steps:
       - name: 'Check out code'
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       # Check pull request head branch to avoid accidental running Release workflow in pull request merge into "main"
       # branch. Release must be created only on merge event "main <- release/vX.X.X"
