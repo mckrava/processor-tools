@@ -43,13 +43,26 @@ export declare type CachedModel<T> = {
 export declare class CacheStorage {
     private static instance;
     entities: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
-    entitiesNames: Map<string, EntityClassConstructable>;
-    entitiesForFlush: Map<EntityClassConstructable, Set<string>>;
+    entityClassNames: Map<string, EntityClassConstructable>;
+    entityIdsForFlush: Map<EntityClassConstructable, Set<string>>;
+    entityIdsNew: Map<EntityClassConstructable, Set<string>>;
     deferredGetList: Map<EntityClassConstructable, Set<string>>;
     deferredRemoveList: Map<EntityClassConstructable, Set<string>>;
+    entitiesForPreSave: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
+    entitiesPropsCache: Map<EntityClassConstructable, Map<string, Record<"id", any>>>;
+    private fetchedEntities;
+    private newEntities;
     private constructor();
     static getInstance(): CacheStorage;
-    setEntityName(entityClass: EntityClassConstructable): void;
+    get entitiesForFlushAll(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
+    getEntitiesForFlushByClass(entityClass: EntityClassConstructable): Map<string, CachedModel<EntityClassConstructable>>;
+    setEntityClassName(entityClass: EntityClassConstructable): void;
+    /**
+     * If entity is newly created in current batch processing session, is will be added to "newEntities" set
+     * for further pre-saving flows. If "forFlush === false", entity is considered fetched from DB.
+     */
+    trackEntityStatus<E extends Entity>(e: E, forFlush: boolean): void;
+    isEntityNew<E extends Entity>(e: E): boolean;
 }
 export declare class Store {
     private em;
@@ -87,7 +100,7 @@ export declare class Store {
     /**
      * Persist all updates to the db.
      *
-     * "this.cacheStorage.entitiesForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
+     * "this.cacheStorage.entityIdsForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
      * execution of ".delete || .clear || .deferredRemove" methods. But as cache store doesn't contain removed items,
      * they won't be accidentally saved into DB.
      */
@@ -176,8 +189,15 @@ export declare class Store {
     get<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E | null>;
     getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E>;
     /**
-     * :::: UTILITY METHODS :::
+     * :::::::::::::::::::::::::::::::::::::::::::::::::
+     * :::::::::::::::: UTILITY METHODS ::::::::::::::::
+     * :::::::::::::::::::::::::::::::::::::::::::::::::
      */
+    private _removeEntitiesInDeferredRemove;
     private _extractEntityClass;
+    private _addEntitiesToPreSaveQueue;
+    private _preSaveNewEntitiesAll;
+    private _preSaveNewEntities;
+    private _saveEntitiesWithPropsCacheRestore;
 }
 //# sourceMappingURL=store.d.ts.map

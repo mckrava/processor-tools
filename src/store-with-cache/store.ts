@@ -4,6 +4,7 @@ import { ColumnMetadata } from 'typeorm/metadata/ColumnMetadata';
 import assert from 'assert';
 import { BatchContext } from '@subsquid/substrate-processor';
 import { SchemaMetadata } from './utils/schemaMetadata';
+import { createLogger, Logger } from '@subsquid/logger';
 
 export { TypeormDatabase, FullTypeormDatabase, IsolationLevel } from '@subsquid/typeorm-store';
 
@@ -60,11 +61,20 @@ export class CacheStorage {
   private static instance: CacheStorage;
 
   public entities = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>();
-  public entitiesNames = new Map<string, EntityClassConstructable>();
-  public entitiesForFlush = new Map<EntityClassConstructable, Set<string>>();
+  public entityClassNames = new Map<string, EntityClassConstructable>();
+  public entityIdsForFlush = new Map<EntityClassConstructable, Set<string>>();
+  public entityIdsNew = new Map<EntityClassConstructable, Set<string>>();
 
   public deferredGetList = new Map<EntityClassConstructable, Set<string>>();
   public deferredRemoveList = new Map<EntityClassConstructable, Set<string>>();
+  public entitiesForPreSave = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>();
+  public entitiesPropsCache = new Map<
+    EntityClassConstructable,
+    Map<string, Record<keyof CachedModel<EntityClassConstructable>, any>>
+  >();
+
+  private fetchedEntities = new Map<EntityClassConstructable, Set<string>>();
+  private newEntities = new Map<EntityClassConstructable, Set<string>>();
 
   private constructor() {}
 
@@ -75,8 +85,56 @@ export class CacheStorage {
     return CacheStorage.instance;
   }
 
-  setEntityName(entityClass: EntityClassConstructable) {
-    this.entitiesNames.set(entityClass.name, entityClass);
+  get entitiesForFlushAll() {
+    const entitiesForFlush: Map<
+      EntityClassConstructable,
+      Map<string, CachedModel<EntityClassConstructable>>
+    > = new Map();
+
+    for (const [entityClass, idsForFlush] of [...this.entityIdsForFlush.entries()]) {
+      if (idsForFlush.size === 0) continue;
+      // const filteredItems = [...this.entities.get(entityClass)!.entries()].filter(i => idsForFlush.has(i[0]));
+      entitiesForFlush.set(entityClass, this.getEntitiesForFlushByClass(entityClass));
+    }
+    return entitiesForFlush;
+  }
+
+  getEntitiesForFlushByClass(
+    entityClass: EntityClassConstructable
+  ): Map<string, CachedModel<EntityClassConstructable>> {
+    const idsForFlush = this.entityIdsForFlush.get(entityClass) || new Set<string>();
+    if (idsForFlush.size === 0) return new Map();
+
+    return new Map(
+      [...(this.entities.get(entityClass) || new Map<string, CachedModel<EntityClassConstructable>>()).values()]
+        .filter(entity => idsForFlush.has(entity.id))
+        .map(i => [i.id, i])
+    );
+  }
+
+  setEntityClassName(entityClass: EntityClassConstructable) {
+    this.entityClassNames.set(entityClass.name, entityClass);
+  }
+
+  /**
+   * If entity is newly created in current batch processing session, is will be added to "newEntities" set
+   * for further pre-saving flows. If "forFlush === false", entity is considered fetched from DB.
+   */
+  trackEntityStatus<E extends Entity>(e: E, forFlush: boolean) {
+    const entityClass = e.constructor as EntityClass<E>;
+    if (!forFlush) {
+      this.fetchedEntities.set(entityClass, (this.fetchedEntities.get(entityClass) || new Set()).add(e.id));
+      if (this.newEntities.has(entityClass)) this.newEntities.get(entityClass)!.delete(e.id);
+      return;
+    }
+    if (!(this.fetchedEntities.get(entityClass) || new Map()).has(e.id)) {
+      this.newEntities.set(entityClass, (this.newEntities.get(entityClass) || new Set()).add(e.id));
+    }
+  }
+
+  isEntityNew<E extends Entity>(e: E) {
+    const entityClass = e.constructor as EntityClass<E>;
+    return (this.newEntities.get(entityClass) || new Set()).has(e.id);
   }
 }
 
@@ -98,7 +156,7 @@ export class Store {
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): Store;
 
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): Store {
-    this.cacheStorage.setEntityName(entityConstructor);
+    this.cacheStorage.setEntityClassName(entityConstructor);
 
     if (!idOrList) {
       this.cacheStorage.deferredGetList.set(entityConstructor, new Set<string>().add('*'));
@@ -122,7 +180,7 @@ export class Store {
    * Cache.get() method.
    */
   deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): Store {
-    this.cacheStorage.setEntityName(entityConstructor);
+    this.cacheStorage.setEntityClassName(entityConstructor);
 
     const defRemIdsList = this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set();
 
@@ -149,14 +207,11 @@ export class Store {
   ): void {
     if (Array.isArray(entityOrList) && entityOrList.length === 0) return;
 
-    const entityClassConstructor = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList)
-      .constructor as EntityClass<E>;
-    const existingEntities =
-      this.cacheStorage.entities.get(entityClassConstructor) || new Map<string, CachedModel<E>>();
-    const existingEntitiesForFlush =
-      this.cacheStorage.entitiesForFlush.get(entityClassConstructor) || new Set<string>();
+    const entityClass = (Array.isArray(entityOrList) ? entityOrList[0] : entityOrList).constructor as EntityClass<E>;
+    const existingEntities = this.cacheStorage.entities.get(entityClass) || new Map<string, CachedModel<E>>();
+    const existingEntityIdsForFlush = this.cacheStorage.entityIdsForFlush.get(entityClass) || new Set<string>();
 
-    this.cacheStorage.setEntityName(entityClassConstructor);
+    this.cacheStorage.setEntityClassName(entityClass);
 
     for (let entity of Array.isArray(entityOrList) ? entityOrList : [entityOrList]) {
       let entityDecorated = entity;
@@ -173,11 +228,12 @@ export class Store {
       }
 
       existingEntities.set(entityDecorated.id, entityDecorated);
-      if (setForFlush) existingEntitiesForFlush.add(entity.id);
+      if (setForFlush) existingEntityIdsForFlush.add(entity.id);
+      this.cacheStorage.trackEntityStatus(entity, setForFlush);
     }
 
-    this.cacheStorage.entities.set(entityClassConstructor, existingEntities);
-    if (setForFlush) this.cacheStorage.entitiesForFlush.set(entityClassConstructor, existingEntitiesForFlush);
+    this.cacheStorage.entities.set(entityClass, existingEntities);
+    if (setForFlush) this.cacheStorage.entityIdsForFlush.set(entityClass, existingEntityIdsForFlush);
   }
 
   /**
@@ -224,7 +280,7 @@ export class Store {
   /**
    * Persist all updates to the db.
    *
-   * "this.cacheStorage.entitiesForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
+   * "this.cacheStorage.entityIdsForFlush" Map can contain entities IDs, which are not presented in cache store. It's possible after
    * execution of ".delete || .clear || .deferredRemove" methods. But as cache store doesn't contain removed items,
    * they won't be accidentally saved into DB.
    */
@@ -234,46 +290,117 @@ export class Store {
   }
 
   private async _flushAll(): Promise<void> {
-    for (const i in this.schemaMetadata.entitiesOrderedList) {
-      if (this.cacheStorage.entitiesNames.has(this.schemaMetadata.entitiesOrderedList[i])) {
-        await this._flushByClass(this.cacheStorage.entitiesNames.get(this.schemaMetadata.entitiesOrderedList[i])!);
-      }
+    let logger: Logger = createLogger('sqd:store').child('Store');
+    this.schemaMetadata.sortClassesByEntitiesList(this.cacheStorage.entitiesForFlushAll);
+
+    /**
+     * Add new entities to Pre-Save queue.
+     */
+
+    logger.trace(this.schemaMetadata.entitiesOrderedList, '_flushAll::entitiesOrderedList > ');
+    logger.trace(`_flushAll::entitiesRelationsTree > ${JSON.stringify(this.schemaMetadata.entitiesRelationsTree)}`);
+
+    for (const orderedClass of this.schemaMetadata.entitiesOrderedList) {
+      if (!this.cacheStorage.entityClassNames.has(orderedClass))
+        throw Error(`Class ${orderedClass} is not existing in entityClassNames list.`);
+
+      this._addEntitiesToPreSaveQueue([
+        ...this.cacheStorage.getEntitiesForFlushByClass(this.cacheStorage.entityClassNames.get(orderedClass)!).values()
+      ]);
+    }
+
+    /**
+     * Save all prepared entities in pre-save queue in order, which is defined by "entitiesRelationsTree". In this
+     * save flow all nullable foreign keys are filled by null value.
+     */
+    await this._preSaveNewEntitiesAll(this.schemaMetadata.entitiesOrderedList);
+
+    /**
+     * Save all entities of related classes in order, which is defined by "entitiesRelationsTree". In this save flow
+     * all (new and existing) items will be saved. New items will be saved with restored foreign key values after
+     * _preSaveNewEntitiesAll execution.
+     */
+    for (const orderedClass in this.schemaMetadata.entitiesOrderedList) {
+      const entityClass = this.cacheStorage.entityClassNames.get(orderedClass)!;
+
+      await this._saveEntitiesWithPropsCacheRestore(entityClass, [
+        ...this.cacheStorage.getEntitiesForFlushByClass(entityClass).values()
+      ]);
+      this.cacheStorage.entityIdsForFlush.set(entityClass, new Set<string>());
+      /**
+       * Remove all items from deferredRemove list for iterated class.
+       */
+      await this._removeEntitiesInDeferredRemove(entityClass);
     }
   }
 
-  private async _flushByClass<E extends Entity>(
-    entityConstructor: EntityClass<E>,
-    recursive: boolean = false
-  ): Promise<void> {
+  private async _flushByClass<E extends Entity>(entityConstructor: EntityClass<E>): Promise<void> {
+    this.schemaMetadata.sortClassesByEntitiesList(this.cacheStorage.entitiesForFlushAll);
+    let logger: Logger = createLogger('sqd:store').child('Store');
+    logger.trace(`_flushByClass::className > ${entityConstructor.name}`);
+
     /**
      * We need to save all relations of current class beforehand by relations tree of this class to avoid
      * "violates foreign key constraint" errors.
      */
-    if (recursive) {
-      if (this.schemaMetadata.entitiesRelationsTree.has(entityConstructor.name)) {
-        for (const relName of this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name) || []) {
-          if (this.cacheStorage.entitiesNames.has(relName))
-            await this._flushByClass(this.cacheStorage.entitiesNames.get(relName)!, false);
-        }
+    if (!this.schemaMetadata.entitiesRelationsTree.has(entityConstructor.name)) return;
+
+    /**
+     * Add new entities of related classes to Pre-Save queue.
+     */
+    for (const relName of this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name) || []) {
+      if (!this.cacheStorage.entityClassNames.has(relName))
+        throw Error(`Class ${relName} is not existing in entityClassNames list.`);
+
+      this._addEntitiesToPreSaveQueue([
+        ...this.cacheStorage.getEntitiesForFlushByClass(this.cacheStorage.entityClassNames.get(relName)!).values()
+      ]);
+    }
+    /**
+     * Add new entities of requested in "_flushByClass" class to Pre-Save queue.
+     */
+    this._addEntitiesToPreSaveQueue([...this.cacheStorage.getEntitiesForFlushByClass(entityConstructor).values()]);
+
+    /**
+     * Save all prepared entities in pre-save queue in order, which is defined by "entitiesRelationsTree". In this save
+     * flow all nullable foreign keys are filled by null value.
+     */
+    await this._preSaveNewEntitiesAll([
+      ...(this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name) || []),
+      entityConstructor.name
+    ]);
+
+    /**
+     * Save all entities of related classes in order, which is defined by "entitiesRelationsTree". In this save flow
+     * all (new and existing) items will be saved. New items will be saved with restored foreign key values after
+     * _preSaveNewEntitiesAll execution.
+     */
+    if (this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name)!.length > 0) {
+      for (const relName of this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name) || []) {
+        const relEntityClass = this.cacheStorage.entityClassNames.get(relName)!;
+        await this._saveEntitiesWithPropsCacheRestore(relEntityClass, [
+          ...this.cacheStorage.getEntitiesForFlushByClass(relEntityClass).values()
+        ]);
+        this.cacheStorage.entityIdsForFlush.set(relEntityClass, new Set<string>());
+        /**
+         * Remove all items from deferredRemove list for iterated class.
+         */
+        await this._removeEntitiesInDeferredRemove(relEntityClass);
       }
     }
-    if (this.cacheStorage.entitiesForFlush.has(entityConstructor)) {
-      const forFlush = this.cacheStorage.entitiesForFlush.get(entityConstructor) || new Set<string>();
-
-      const listForSave = [
-        ...(this.cacheStorage.entities.get(entityConstructor) || new Map<string, CachedModel<E>>()).values()
-      ].filter(entity => forFlush.has(entity.id));
-
-      await this._save(listForSave);
-      this.cacheStorage.entitiesForFlush.set(entityConstructor, new Set<string>());
-    }
-
-    if (this.cacheStorage.deferredRemoveList.has(entityConstructor)) {
-      await this._remove(entityConstructor, [
-        ...(this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set<string>()).values()
-      ]);
-      this.cacheStorage.deferredRemoveList.set(entityConstructor, new Set<string>());
-    }
+    /**
+     * Save all entities of requested in "_flushByClass" class. In this save flow
+     * all (new and existing) items will be saved. New items will be saved/updated with restored foreign key values
+     * after _preSaveNewEntitiesAll execution.
+     */
+    await this._saveEntitiesWithPropsCacheRestore(entityConstructor, [
+      ...this.cacheStorage.getEntitiesForFlushByClass(entityConstructor).values()
+    ]);
+    this.cacheStorage.entityIdsForFlush.set(entityConstructor, new Set<string>());
+    /**
+     * Remove all items from deferredRemove list for requested in _flushByClass class.
+     */
+    await this._removeEntitiesInDeferredRemove(entityConstructor);
   }
 
   /**
@@ -335,7 +462,7 @@ export class Store {
    * If there were upsets after .load()
    */
   isDirty(): boolean {
-    return this.cacheStorage.entitiesForFlush.size > 0;
+    return this.cacheStorage.entityIdsForFlush.size > 0;
   }
 
   /**
@@ -347,9 +474,9 @@ export class Store {
     fetchCb: () => Promise<RT>
   ): Promise<RT> {
     const entityClass = this._extractEntityClass(e);
-    this.cacheStorage.setEntityName(entityClass);
+    this.cacheStorage.setEntityClassName(entityClass);
 
-    await this._flushByClass(entityClass, true);
+    await this._flushByClass(entityClass);
     const response = await fetchCb();
 
     if (response !== undefined && typeof response !== 'number') {
@@ -451,20 +578,20 @@ export class Store {
   remove<E extends Entity>(entityClass: EntityClass<E>, id: string | string[]): Promise<void>;
   async remove<E extends Entity>(e: E | E[] | EntityClass<E>, id?: string | string[]): Promise<void> {
     if (id && !Array.isArray(e) && !('id' in e)) {
-      this.cacheStorage.setEntityName(e);
-      await this._flushByClass(e, true);
+      this.cacheStorage.setEntityClassName(e);
+      await this._flushByClass(e);
       await this._remove(e, id);
       this._cacheDelete(e, id);
     } else if (id == null && ((Array.isArray(e) && 'id' in e[0]) || (!Array.isArray(e) && 'id' in e))) {
       const entityClass = this._extractEntityClass(e);
-      this.cacheStorage.setEntityName(entityClass);
+      this.cacheStorage.setEntityClassName(entityClass);
       if (Array.isArray(e)) {
         for (let i = 1; i < e.length; i++) {
           assert(entityClass === e[i].constructor, 'mass deletion allowed only for entities of the same class');
         }
       }
       const idOrList = Array.isArray(e) ? (e as E[]).map(i => i.id) : (e as E).id;
-      await this._flushByClass(entityClass, true);
+      await this._flushByClass(entityClass);
       await this._remove(e as E | E[]);
       this._cacheDelete(entityClass, idOrList);
     } else {
@@ -617,14 +744,104 @@ export class Store {
   }
 
   /**
-   * :::: UTILITY METHODS :::
+   * :::::::::::::::::::::::::::::::::::::::::::::::::
+   * :::::::::::::::: UTILITY METHODS ::::::::::::::::
+   * :::::::::::::::::::::::::::::::::::::::::::::::::
    */
+
+  private async _removeEntitiesInDeferredRemove<E extends Entity>(entityConstructor: EntityClass<E>): Promise<void> {
+    if (
+      this.cacheStorage.deferredRemoveList.has(entityConstructor) &&
+      this.cacheStorage.deferredRemoveList.get(entityConstructor)!.size > 0
+    ) {
+      await this._remove(entityConstructor, [...this.cacheStorage.deferredRemoveList.get(entityConstructor)!.values()]);
+      this.cacheStorage.deferredRemoveList.set(entityConstructor, new Set<string>());
+    }
+  }
 
   private _extractEntityClass<E extends Entity>(e: E | E[] | EntityClass<E>): EntityClass<E> {
     const singleEnOrClass = Array.isArray(e) ? e[0] : e;
     return 'id' in singleEnOrClass
       ? (singleEnOrClass.constructor as EntityClass<E>)
       : (singleEnOrClass as EntityClass<E>);
+  }
+
+  private _addEntitiesToPreSaveQueue<E extends Entity>(entities: E[]) {
+    if (entities.length === 0) return;
+    const entityClass = entities[0].constructor as EntityClass<E>;
+    if (!this.schemaMetadata.schemaMetadata.has(entityClass.name))
+      throw Error(`Class ${entityClass.name} can not be found in schemaMetadata.`);
+
+    const classFkList = this.schemaMetadata.schemaMetadata.get(entityClass.name)!.foreignKeys;
+    const nullableFk = [...classFkList.values()].filter(fk => !fk.isNullable);
+
+    if (nullableFk.length === 0) return;
+    this.cacheStorage.entitiesPropsCache.set(entityClass, new Map());
+    if (!this.cacheStorage.entitiesForPreSave.has(entityClass))
+      this.cacheStorage.entitiesForPreSave.set(entityClass, new Map());
+
+    for (const e of entities) {
+      if (!this.cacheStorage.isEntityNew(e)) continue;
+      const cachedProps: Record<string, any> = {};
+      nullableFk.forEach(({ propName }) => {
+        cachedProps[propName] = e[propName as keyof E];
+        //@ts-ignore
+        e[propName as keyof E] = null;
+      });
+
+      this.cacheStorage.entitiesPropsCache.get(entityClass)!.set(e.id, cachedProps);
+      this.cacheStorage.entitiesForPreSave.get(entityClass)!.set(e.id, e);
+    }
+  }
+
+  private async _preSaveNewEntitiesAll(saveOrder: string[]): Promise<void> {
+    for (const relName of saveOrder) {
+      if (
+        this.cacheStorage.entityClassNames.has(relName) &&
+        this.cacheStorage.entitiesForPreSave.get(this.cacheStorage.entityClassNames.get(relName)!)
+      ) {
+        const entityClass = this.cacheStorage.entityClassNames.get(relName)!;
+        await this._preSaveNewEntities(entityClass, [
+          ...this.cacheStorage.entitiesForPreSave.get(entityClass)!.values()
+        ]);
+      }
+    }
+  }
+
+  private async _preSaveNewEntities(
+    entityClass: EntityClassConstructable,
+    entities: CachedModel<EntityClassConstructable>[]
+  ): Promise<void> {
+    await this.em().then(async em => {
+      for (let b of splitIntoBatches([...entities.values()], 1000)) {
+        await em.insert(entityClass, b as any);
+      }
+    });
+    entities.forEach(e => this.cacheStorage.trackEntityStatus(e, false));
+    this.cacheStorage.entitiesForPreSave.delete(entityClass);
+  }
+
+  private async _saveEntitiesWithPropsCacheRestore(
+    entityClass: EntityClassConstructable,
+    entities: CachedModel<EntityClassConstructable>[]
+  ): Promise<void> {
+    await this._save(
+      entities.map(e => {
+        if (
+          this.cacheStorage.entitiesPropsCache.has(entityClass) &&
+          this.cacheStorage.entitiesPropsCache.get(entityClass)!.has(e.id)
+        ) {
+          const cachedProps = this.cacheStorage.entitiesPropsCache.get(entityClass)!.get(e.id)!;
+          for (const prop in cachedProps) {
+            //@ts-ignore
+            e[prop] = cachedProps[prop];
+          }
+          this.cacheStorage.entitiesPropsCache.get(entityClass)!.delete(e.id);
+          return e;
+        }
+        return e;
+      })
+    );
   }
 }
 
