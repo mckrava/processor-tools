@@ -40,15 +40,16 @@ export declare type EntityClassConstructable = EntityClass<Entity>;
 export declare type CachedModel<T> = {
     [P in keyof T]: Exclude<T[P], null | undefined> extends Entity ? null | undefined extends T[P] ? Entity | null | undefined : Entity : T[P];
 } & Entity;
+export declare type CacheStorageEntitiesScope = Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
 export declare class CacheStorage {
     private static instance;
-    entities: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
+    entities: CacheStorageEntitiesScope;
     entityClassNames: Map<string, EntityClassConstructable>;
     entityIdsForFlush: Map<EntityClassConstructable, Set<string>>;
     entityIdsNew: Map<EntityClassConstructable, Set<string>>;
     deferredGetList: Map<EntityClassConstructable, Set<string>>;
     deferredRemoveList: Map<EntityClassConstructable, Set<string>>;
-    entitiesForPreSave: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
+    entitiesForPreSave: CacheStorageEntitiesScope;
     entitiesPropsCache: Map<EntityClassConstructable, Map<string, Record<"id", any>>>;
     private fetchedEntities;
     private newEntities;
@@ -124,7 +125,7 @@ export declare class Store {
     /**
      * Returns full cache data
      */
-    entries(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
+    entries(): CacheStorageEntitiesScope;
     /**
      * Delete all entities of specific class from cache storage
      */
@@ -185,8 +186,9 @@ export declare class Store {
      * Get entity by ID either from cache or DB if cache storage doesn't contain requested item.
      * @param entityClass
      * @param id
+     * @param search
      */
-    get<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E | null>;
+    get<E extends Entity>(entityClass: EntityClass<E>, id: string, search?: boolean): Promise<E | null>;
     getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E>;
     /**
      * :::::::::::::::::::::::::::::::::::::::::::::::::

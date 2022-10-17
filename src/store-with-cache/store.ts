@@ -57,17 +57,22 @@ export type CachedModel<T> = {
     : T[P];
 } & Entity;
 
+export type CacheStorageEntitiesScope = Map<
+  EntityClassConstructable,
+  Map<string, CachedModel<EntityClassConstructable>>
+>;
+
 export class CacheStorage {
   private static instance: CacheStorage;
 
-  public entities = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>();
+  public entities: CacheStorageEntitiesScope = new Map();
   public entityClassNames = new Map<string, EntityClassConstructable>();
   public entityIdsForFlush = new Map<EntityClassConstructable, Set<string>>();
   public entityIdsNew = new Map<EntityClassConstructable, Set<string>>();
 
   public deferredGetList = new Map<EntityClassConstructable, Set<string>>();
   public deferredRemoveList = new Map<EntityClassConstructable, Set<string>>();
-  public entitiesForPreSave = new Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>();
+  public entitiesForPreSave: CacheStorageEntitiesScope = new Map();
   public entitiesPropsCache = new Map<
     EntityClassConstructable,
     Map<string, Record<keyof CachedModel<EntityClassConstructable>, any>>
@@ -432,7 +437,7 @@ export class Store {
   /**
    * Returns full cache data
    */
-  entries(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>> {
+  entries(): CacheStorageEntitiesScope {
     return this.cacheStorage.entities;
   }
 
@@ -727,13 +732,23 @@ export class Store {
    * Get entity by ID either from cache or DB if cache storage doesn't contain requested item.
    * @param entityClass
    * @param id
+   * @param search
    */
-  get<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E | null> {
-    return (
-      ((this.cacheStorage.entities.get(entityClass) || new Map()).get(id) ||
-        this._processFetch(entityClass, (): Promise<E | undefined> => this.findOneBy(entityClass, { id } as any))) ??
-      null
-    );
+  async get<E extends Entity>(entityClass: EntityClass<E>, id: string, search: boolean = true): Promise<E | null> {
+    const cachedVal =
+      (this.cacheStorage.entities.get(entityClass) || new Map<string, CachedModel<EntityClassConstructable>>()).get(
+        id
+      ) ?? null;
+
+    if (cachedVal === null && search) {
+      const dbVal = await this._processFetch(
+        entityClass,
+        (): Promise<E | undefined> => this.findOneBy(entityClass, { id } as any)
+      );
+      return dbVal ?? null;
+    }
+    //@ts-ignore
+    return cachedVal;
   }
 
   getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E> {
