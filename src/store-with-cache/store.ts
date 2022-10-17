@@ -68,7 +68,6 @@ export class CacheStorage {
   public entities: CacheStorageEntitiesScope = new Map();
   public entityClassNames = new Map<string, EntityClassConstructable>();
   public entityIdsForFlush = new Map<EntityClassConstructable, Set<string>>();
-  public entityIdsNew = new Map<EntityClassConstructable, Set<string>>();
 
   public deferredGetList = new Map<EntityClassConstructable, Set<string>>();
   public deferredRemoveList = new Map<EntityClassConstructable, Set<string>>();
@@ -78,8 +77,8 @@ export class CacheStorage {
     Map<string, Record<keyof CachedModel<EntityClassConstructable>, any>>
   >();
 
-  private fetchedEntities = new Map<EntityClassConstructable, Set<string>>();
-  private newEntities = new Map<EntityClassConstructable, Set<string>>();
+  private entityIdsFetched = new Map<EntityClassConstructable, Set<string>>();
+  private entityIdsNew = new Map<EntityClassConstructable, Set<string>>();
 
   private constructor() {}
 
@@ -122,24 +121,24 @@ export class CacheStorage {
   }
 
   /**
-   * If entity is newly created in current batch processing session, is will be added to "newEntities" set
+   * If entity is newly created in current batch processing session, is will be added to "entityIdsNew" set
    * for further pre-saving flows. If "forFlush === false", entity is considered fetched from DB.
    */
   trackEntityStatus<E extends Entity>(e: E, forFlush: boolean) {
     const entityClass = e.constructor as EntityClass<E>;
     if (!forFlush) {
-      this.fetchedEntities.set(entityClass, (this.fetchedEntities.get(entityClass) || new Set()).add(e.id));
-      if (this.newEntities.has(entityClass)) this.newEntities.get(entityClass)!.delete(e.id);
+      this.entityIdsFetched.set(entityClass, (this.entityIdsFetched.get(entityClass) || new Set()).add(e.id));
+      if (this.entityIdsNew.has(entityClass)) this.entityIdsNew.get(entityClass)!.delete(e.id);
       return;
     }
-    if (!(this.fetchedEntities.get(entityClass) || new Map()).has(e.id)) {
-      this.newEntities.set(entityClass, (this.newEntities.get(entityClass) || new Set()).add(e.id));
+    if (!(this.entityIdsFetched.get(entityClass) || new Map()).has(e.id)) {
+      this.entityIdsNew.set(entityClass, (this.entityIdsNew.get(entityClass) || new Set()).add(e.id));
     }
   }
 
   isEntityNew<E extends Entity>(e: E) {
     const entityClass = e.constructor as EntityClass<E>;
-    return (this.newEntities.get(entityClass) || new Set()).has(e.id);
+    return (this.entityIdsNew.get(entityClass) || new Set()).has(e.id);
   }
 }
 
@@ -732,15 +731,15 @@ export class Store {
    * Get entity by ID either from cache or DB if cache storage doesn't contain requested item.
    * @param entityClass
    * @param id
-   * @param search
+   * @param fetchFromDb
    */
-  async get<E extends Entity>(entityClass: EntityClass<E>, id: string, search: boolean = true): Promise<E | null> {
+  async get<E extends Entity>(entityClass: EntityClass<E>, id: string, fetchFromDb: boolean = true): Promise<E | null> {
     const cachedVal =
       (this.cacheStorage.entities.get(entityClass) || new Map<string, CachedModel<EntityClassConstructable>>()).get(
         id
       ) ?? null;
 
-    if (cachedVal === null && search) {
+    if (cachedVal === null && fetchFromDb) {
       const dbVal = await this._processFetch(
         entityClass,
         (): Promise<E | undefined> => this.findOneBy(entityClass, { id } as any)
