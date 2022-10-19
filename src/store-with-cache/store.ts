@@ -320,11 +320,14 @@ export class Store {
     await this._preSaveNewEntitiesAll(this.schemaMetadata.entitiesOrderedList);
 
     /**
-     * Save all entities of related classes in order, which is defined by "entitiesRelationsTree". In this save flow
+     * Save all entities of related classes in order, which is defined by "entitiesOrderedList". In this save flow
      * all (new and existing) items will be saved. New items will be saved with restored foreign key values after
      * _preSaveNewEntitiesAll execution.
      */
-    for (const orderedClass in this.schemaMetadata.entitiesOrderedList) {
+    for (const orderedClass of this.schemaMetadata.entitiesOrderedList) {
+      if (!this.cacheStorage.entityClassNames.has(orderedClass))
+        throw Error(`Class ${orderedClass} is not existing in entityClassNames list.`);
+
       const entityClass = this.cacheStorage.entityClassNames.get(orderedClass)!;
 
       await this._saveEntitiesWithPropsCacheRestore(entityClass, [

@@ -46,20 +46,19 @@ export declare class CacheStorage {
     entities: CacheStorageEntitiesScope;
     entityClassNames: Map<string, EntityClassConstructable>;
     entityIdsForFlush: Map<EntityClassConstructable, Set<string>>;
-    entityIdsNew: Map<EntityClassConstructable, Set<string>>;
     deferredGetList: Map<EntityClassConstructable, Set<string>>;
     deferredRemoveList: Map<EntityClassConstructable, Set<string>>;
     entitiesForPreSave: CacheStorageEntitiesScope;
     entitiesPropsCache: Map<EntityClassConstructable, Map<string, Record<"id", any>>>;
-    private fetchedEntities;
-    private newEntities;
+    private entityIdsFetched;
+    private entityIdsNew;
     private constructor();
     static getInstance(): CacheStorage;
     get entitiesForFlushAll(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
     getEntitiesForFlushByClass(entityClass: EntityClassConstructable): Map<string, CachedModel<EntityClassConstructable>>;
     setEntityClassName(entityClass: EntityClassConstructable): void;
     /**
-     * If entity is newly created in current batch processing session, is will be added to "newEntities" set
+     * If entity is newly created in current batch processing session, is will be added to "entityIdsNew" set
      * for further pre-saving flows. If "forFlush === false", entity is considered fetched from DB.
      */
     trackEntityStatus<E extends Entity>(e: E, forFlush: boolean): void;
@@ -186,9 +185,9 @@ export declare class Store {
      * Get entity by ID either from cache or DB if cache storage doesn't contain requested item.
      * @param entityClass
      * @param id
-     * @param search
+     * @param fetchFromDb
      */
-    get<E extends Entity>(entityClass: EntityClass<E>, id: string, search?: boolean): Promise<E | null>;
+    get<E extends Entity>(entityClass: EntityClass<E>, id: string, fetchFromDb?: boolean): Promise<E | null>;
     getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E>;
     /**
      * :::::::::::::::::::::::::::::::::::::::::::::::::
