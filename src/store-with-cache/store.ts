@@ -178,22 +178,33 @@ export class Store {
   }
 
   /**
-   * Add ids of entities which should be removed, resolved after Cache.flush()
+   * Add ids of entities which should be removed, resolved after store.flush()
    * Keeps items as Map structure.
    * If item is added to the list for deferredRemove, it will be removed from local cache and won't be available for
-   * Cache.get() method.
+   * store.get() method.
    */
-  deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): Store {
-    this.cacheStorage.setEntityClassName(entityConstructor);
+  deferredRemove<T extends Entity>(entity: T): Store;
+  deferredRemove<T extends Entity>(entities: T[]): Store;
+  deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): Store;
+  deferredRemove<T extends Entity>(e: T | T[] | EntityClass<T>, idOrList?: string | string[]): Store {
+    const entityClass = this._extractEntityClass(e);
+    let idsList: string[] = [];
+    if (idOrList && !Array.isArray(e) && !('id' in e)) {
+      idsList = Array.isArray(idOrList) ? idOrList : [idOrList];
+    } else if (idOrList == null && ((Array.isArray(e) && 'id' in e[0]) || (!Array.isArray(e) && 'id' in e))) {
+      idsList = (Array.isArray(e) ? e : [e]).map(i => i.id);
+    }
 
-    const defRemIdsList = this.cacheStorage.deferredRemoveList.get(entityConstructor) || new Set();
+    this.cacheStorage.setEntityClassName(entityClass);
 
-    for (const idItem of Array.isArray(idOrList) ? idOrList : [idOrList]) {
+    const defRemIdsList = this.cacheStorage.deferredRemoveList.get(entityClass) || new Set();
+
+    for (const idItem of idsList) {
       defRemIdsList.add(idItem);
     }
-    this.cacheStorage.deferredRemoveList.set(entityConstructor, defRemIdsList);
+    this.cacheStorage.deferredRemoveList.set(entityClass, defRemIdsList);
 
-    const cachedEntities = this.cacheStorage.entities.get(entityConstructor) || new Map();
+    const cachedEntities = this.cacheStorage.entities.get(entityClass) || new Map();
     let isIntersection = false;
     defRemIdsList.forEach(defRemItemId => {
       if (cachedEntities.has(defRemItemId)) {
@@ -201,7 +212,7 @@ export class Store {
         isIntersection = true;
       }
     });
-    if (isIntersection) this.cacheStorage.entities.set(entityConstructor, cachedEntities);
+    if (isIntersection) this.cacheStorage.entities.set(entityClass, cachedEntities);
     return this;
   }
 
@@ -382,32 +393,20 @@ export class Store {
      * all (new and existing) items will be saved. New items will be saved with restored foreign key values after
      * _preSaveNewEntitiesAll execution.
      */
-    if (this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name)!.length > 0) {
-      for (const relName of this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name) || []) {
-        const relEntityClass = this.cacheStorage.entityClassNames.get(relName)!;
-        await this._saveEntitiesWithPropsCacheRestore(relEntityClass, [
-          ...this.cacheStorage.getEntitiesForFlushByClass(relEntityClass).values()
-        ]);
-        this.cacheStorage.entityIdsForFlush.set(relEntityClass, new Set<string>());
-        /**
-         * Remove all items from deferredRemove list for iterated class.
-         */
-        await this._removeEntitiesInDeferredRemove(relEntityClass);
-      }
+    for (const relName of [
+      ...(this.schemaMetadata.entitiesRelationsTree.get(entityConstructor.name) || []),
+      entityConstructor.name
+    ]) {
+      const relEntityClass = this.cacheStorage.entityClassNames.get(relName)!;
+      await this._saveEntitiesWithPropsCacheRestore(relEntityClass, [
+        ...this.cacheStorage.getEntitiesForFlushByClass(relEntityClass).values()
+      ]);
+      this.cacheStorage.entityIdsForFlush.set(relEntityClass, new Set<string>());
+      /**
+       * Remove all items from deferredRemove list for iterated class.
+       */
+      await this._removeEntitiesInDeferredRemove(relEntityClass);
     }
-    /**
-     * Save all entities of requested in "_flushByClass" class. In this save flow
-     * all (new and existing) items will be saved. New items will be saved/updated with restored foreign key values
-     * after _preSaveNewEntitiesAll execution.
-     */
-    await this._saveEntitiesWithPropsCacheRestore(entityConstructor, [
-      ...this.cacheStorage.getEntitiesForFlushByClass(entityConstructor).values()
-    ]);
-    this.cacheStorage.entityIdsForFlush.set(entityConstructor, new Set<string>());
-    /**
-     * Remove all items from deferredRemove list for requested in _flushByClass class.
-     */
-    await this._removeEntitiesInDeferredRemove(entityConstructor);
   }
 
   /**

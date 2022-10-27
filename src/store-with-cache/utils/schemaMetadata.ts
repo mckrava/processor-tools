@@ -22,8 +22,10 @@ export class SchemaMetadata {
   private _entitiesOrderedList: string[] = [];
   private _entitiesRelationsTree: Map<string, string[]> = new Map();
   private _graphInstance: Graph;
+  private projectDir: string | undefined;
 
-  constructor() {
+  constructor(projectDir?: string) {
+    this.projectDir = projectDir;
     this._graphInstance = new Graph();
     this.processSchema();
   }
@@ -42,7 +44,7 @@ export class SchemaMetadata {
   }
 
   processSchema(): SchemaMetadata {
-    let model: Model = loadModel(resolveGraphqlSchema());
+    let model: Model = loadModel(resolveGraphqlSchema(this.projectDir));
     this._schemaMetadata = new Map();
     this._schemaMetadataSummarizedFk = new Map();
 

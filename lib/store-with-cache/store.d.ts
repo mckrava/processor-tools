@@ -79,11 +79,13 @@ export declare class Store {
      */
     deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>, idOrList?: string | string[]): Store;
     /**
-     * Add ids of entities which should be removed, resolved after Cache.flush()
+     * Add ids of entities which should be removed, resolved after store.flush()
      * Keeps items as Map structure.
      * If item is added to the list for deferredRemove, it will be removed from local cache and won't be available for
-     * Cache.get() method.
+     * store.get() method.
      */
+    deferredRemove<T extends Entity>(entity: T): Store;
+    deferredRemove<T extends Entity>(entities: T[]): Store;
     deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): Store;
     private _upsert;
     /**

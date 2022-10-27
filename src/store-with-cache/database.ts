@@ -1,3 +1,4 @@
+import * as dotenv from 'dotenv';
 import { createOrmConfig } from '@subsquid/typeorm-config';
 import { assertNotNull } from '@subsquid/util-internal';
 import assert from 'assert';
@@ -5,6 +6,8 @@ import { DataSource, EntityManager } from 'typeorm';
 import { Store, CacheStorage } from './store';
 import { createTransaction, Tx } from './tx';
 import { SchemaMetadata } from './utils/schemaMetadata';
+
+dotenv.config();
 
 export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE READ';
 
@@ -120,14 +123,10 @@ export class TypeormDatabase extends BaseDatabase<Store> {
 
   constructor(options?: TypeormDatabaseOptions) {
     super(options);
-    this.schemaMetadata = new SchemaMetadata();
+    this.schemaMetadata = new SchemaMetadata(process.env.PROJECT_DIR);
     this.cacheStorage = CacheStorage.getInstance();
   }
-  protected async runTransaction(
-    from: number,
-    to: number,
-    cb: (store: Store) => Promise<void>
-  ): Promise<void> {
+  protected async runTransaction(from: number, to: number, cb: (store: Store) => Promise<void>): Promise<void> {
     let tx: Promise<Tx> | undefined;
     let open = true;
 

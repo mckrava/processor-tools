@@ -1,0 +1,11 @@
+type Item @entity {
+  id: ID!
+  name: String
+  foo: String
+}
+
+type Order @entity {
+  id: ID!
+  item: Item
+  qty: Int
+}
