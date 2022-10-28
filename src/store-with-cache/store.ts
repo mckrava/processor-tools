@@ -78,7 +78,7 @@ export class CacheStorage {
   >();
 
   private entityIdsFetched = new Map<EntityClassConstructable, Set<string>>();
-  private entityIdsNew = new Map<EntityClassConstructable, Set<string>>();
+  public entityIdsNew = new Map<EntityClassConstructable, Set<string>>();
 
   private constructor() {}
 
@@ -126,6 +126,7 @@ export class CacheStorage {
    */
   trackEntityStatus<E extends Entity>(e: E, forFlush: boolean) {
     const entityClass = e.constructor as EntityClass<E>;
+
     if (!forFlush) {
       this.entityIdsFetched.set(entityClass, (this.entityIdsFetched.get(entityClass) || new Set()).add(e.id));
       if (this.entityIdsNew.has(entityClass)) this.entityIdsNew.get(entityClass)!.delete(e.id);
@@ -140,6 +141,17 @@ export class CacheStorage {
     const entityClass = e.constructor as EntityClass<E>;
     return (this.entityIdsNew.get(entityClass) || new Set()).has(e.id);
   }
+
+  purgeCacheStorage() {
+    this.entities.clear();
+    this.entityIdsForFlush.clear();
+    this.deferredGetList.clear();
+    this.deferredRemoveList.clear();
+    this.entitiesForPreSave.clear();
+    this.entitiesPropsCache.clear();
+    this.entityIdsFetched.clear();
+    this.entityIdsNew.clear();
+  }
 }
 
 export class Store {
@@ -148,6 +160,27 @@ export class Store {
     private cacheStorage: CacheStorage,
     private schemaMetadata: SchemaMetadata
   ) {}
+
+  /**
+   * If there are unresolved gets
+   */
+  get ready(): boolean {
+    return this.cacheStorage.deferredGetList.size === 0 && this.cacheStorage.deferredRemoveList.size === 0;
+  }
+
+  /**
+   * If there were upsets after .load()
+   */
+  get isDirty(): boolean {
+    return this.cacheStorage.entityIdsForFlush.size > 0;
+  }
+
+  /**
+   * Returns full cache data
+   */
+  get entries(): CacheStorageEntitiesScope {
+    return this.cacheStorage.entities;
+  }
 
   /**
    * Add request for loading all entities of defined class.
@@ -216,6 +249,7 @@ export class Store {
     return this;
   }
 
+  // TODO Review "setForFlush" param logic
   private _upsert<E extends CachedModel<E>>(
     entityOrList: CachedModel<E> | CachedModel<E>[],
     setForFlush: boolean
@@ -233,12 +267,19 @@ export class Store {
       for (const entityFieldName in entity) {
         let fieldValue = entity[entityFieldName as keyof CachedModel<E>];
 
-        if (fieldValue !== null && typeof fieldValue === 'object' && !Array.isArray(fieldValue) && 'id' in fieldValue) {
+        if (
+          fieldValue !== null &&
+          typeof fieldValue === 'object' &&
+          !Array.isArray(fieldValue) &&
+          'id' in fieldValue &&
+          // @ts-ignore
+          fieldValue.constructor.name !== 'Object'
+        ) {
           const fieldValueDecorated = fieldValue as unknown as Entity;
           entityDecorated[entityFieldName as keyof E] = {
             id: fieldValueDecorated.id
           } as unknown as E[keyof E];
-          this._upsert(fieldValue as EntityClassConstructable[keyof EntityClassConstructable], false);
+          this._upsert(fieldValue as EntityClassConstructable[keyof EntityClassConstructable], setForFlush);
         }
       }
 
@@ -308,12 +349,11 @@ export class Store {
     let logger: Logger = createLogger('sqd:store').child('Store');
     this.schemaMetadata.sortClassesByEntitiesList(this.cacheStorage.entitiesForFlushAll);
 
+    logger.trace(this.schemaMetadata.entitiesOrderedList, '_flushAll::entitiesOrderedList > ');
+    logger.trace(`_flushAll::entitiesRelationsTree > ${JSON.stringify(this.schemaMetadata.entitiesRelationsTree)}`);
     /**
      * Add new entities to Pre-Save queue.
      */
-
-    logger.trace(this.schemaMetadata.entitiesOrderedList, '_flushAll::entitiesOrderedList > ');
-    logger.trace(`_flushAll::entitiesRelationsTree > ${JSON.stringify(this.schemaMetadata.entitiesRelationsTree)}`);
 
     for (const orderedClass of this.schemaMetadata.entitiesOrderedList) {
       if (!this.cacheStorage.entityClassNames.has(orderedClass))
@@ -345,11 +385,19 @@ export class Store {
         ...this.cacheStorage.getEntitiesForFlushByClass(entityClass).values()
       ]);
       this.cacheStorage.entityIdsForFlush.set(entityClass, new Set<string>());
-      /**
-       * Remove all items from deferredRemove list for iterated class.
-       */
-      await this._removeEntitiesInDeferredRemove(entityClass);
     }
+
+    /**
+     * Remove entities from deferredRemove list
+     */
+    this.schemaMetadata.generateEntitiesOrderedList();
+
+    logger.trace(this.schemaMetadata.entitiesOrderedList, '_flushAll::removeEntities::entitiesOrderedList > ');
+    logger.trace(
+      `_flushAll::removeEntities::entitiesRelationsTree > ${JSON.stringify(this.schemaMetadata.entitiesRelationsTree)}`
+    );
+
+    await this._removeEntitiesInDeferredRemove();
   }
 
   private async _flushByClass<E extends Entity>(entityConstructor: EntityClass<E>): Promise<void> {
@@ -402,11 +450,19 @@ export class Store {
         ...this.cacheStorage.getEntitiesForFlushByClass(relEntityClass).values()
       ]);
       this.cacheStorage.entityIdsForFlush.set(relEntityClass, new Set<string>());
-      /**
-       * Remove all items from deferredRemove list for iterated class.
-       */
-      await this._removeEntitiesInDeferredRemove(relEntityClass);
     }
+
+    /**
+     * Remove entities from deferredRemove list
+     */
+    this.schemaMetadata.generateEntitiesOrderedList();
+
+    logger.trace(this.schemaMetadata.entitiesOrderedList, '_flushAll::removeEntities::entitiesOrderedList > ');
+    logger.trace(
+      `_flushAll::removeEntities::entitiesRelationsTree > ${JSON.stringify(this.schemaMetadata.entitiesRelationsTree)}`
+    );
+
+    await this._removeEntitiesInDeferredRemove();
   }
 
   /**
@@ -436,13 +492,6 @@ export class Store {
   }
 
   /**
-   * Returns full cache data
-   */
-  entries(): CacheStorageEntitiesScope {
-    return this.cacheStorage.entities;
-  }
-
-  /**
    * Delete all entities of specific class from cache storage
    */
   clear<T extends Entity>(entityConstructor: EntityClass<T>): void {
@@ -454,21 +503,7 @@ export class Store {
    * Purge current cache.
    */
   purge(): void {
-    this.cacheStorage.entities.clear();
-  }
-
-  /**
-   * If there are unresolved gets
-   */
-  ready(): boolean {
-    return this.cacheStorage.deferredGetList.size === 0 && this.cacheStorage.deferredRemoveList.size === 0;
-  }
-
-  /**
-   * If there were upsets after .load()
-   */
-  isDirty(): boolean {
-    return this.cacheStorage.entityIdsForFlush.size > 0;
+    this.cacheStorage.purgeCacheStorage();
   }
 
   /**
@@ -699,7 +734,14 @@ export class Store {
       entityClass,
       (): Promise<E | undefined> =>
         this.em()
-          .then(em => em.findOneBy(entityClass, where))
+          .then(em =>
+            em.findOne(entityClass, {
+              loadRelationIds: {
+                disableMixedMap: true
+              },
+              where
+            })
+          )
           .then(noNull)
     );
   }
@@ -725,7 +767,15 @@ export class Store {
   ): Promise<E> {
     return this._processFetch(
       entityClass,
-      (): Promise<E> => this.em().then(em => em.findOneByOrFail(entityClass, where))
+      (): Promise<E> =>
+        this.em().then(em =>
+          em.findOneOrFail(entityClass, {
+            loadRelationIds: {
+              disableMixedMap: true
+            },
+            where
+          })
+        )
     );
   }
 
@@ -742,10 +792,7 @@ export class Store {
       ) ?? null;
 
     if (cachedVal === null && fetchFromDb) {
-      const dbVal = await this._processFetch(
-        entityClass,
-        (): Promise<E | undefined> => this.findOneBy(entityClass, { id } as any)
-      );
+      const dbVal = await this.findOneBy(entityClass, { id } as any);
       return dbVal ?? null;
     }
     //@ts-ignore
@@ -755,7 +802,7 @@ export class Store {
   getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E> {
     return (
       (this.cacheStorage.entities.get(entityClass) || new Map()).get(id) ||
-      this._processFetch(entityClass, (): Promise<E> => this.findOneByOrFail(entityClass, { id } as any))
+      this.findOneByOrFail(entityClass, { id } as any)
     );
   }
 
@@ -765,7 +812,25 @@ export class Store {
    * :::::::::::::::::::::::::::::::::::::::::::::::::
    */
 
-  private async _removeEntitiesInDeferredRemove<E extends Entity>(entityConstructor: EntityClass<E>): Promise<void> {
+  private async _removeEntitiesInDeferredRemove(): Promise<void> {
+    for (const orderedClass of this.schemaMetadata.entitiesOrderedList.reverse()) {
+      /**
+       * We can ignore case if class is missed in "entityClassNames" because "entitiesOrderedList" contains
+       * all possible entities in the provided schema
+       */
+      if (!this.cacheStorage.entityClassNames.has(orderedClass)) continue;
+
+      const entityClass = this.cacheStorage.entityClassNames.get(orderedClass)!;
+      /**
+       * Remove all items from deferredRemove list for iterated class.
+       */
+      await this._removeEntitiesInDeferredRemoveByClass(entityClass);
+    }
+  }
+
+  private async _removeEntitiesInDeferredRemoveByClass<E extends Entity>(
+    entityConstructor: EntityClass<E>
+  ): Promise<void> {
     if (
       this.cacheStorage.deferredRemoveList.has(entityConstructor) &&
       this.cacheStorage.deferredRemoveList.get(entityConstructor)!.size > 0
@@ -789,7 +854,7 @@ export class Store {
       throw Error(`Class ${entityClass.name} can not be found in schemaMetadata.`);
 
     const classFkList = this.schemaMetadata.schemaMetadata.get(entityClass.name)!.foreignKeys;
-    const nullableFk = [...classFkList.values()].filter(fk => !fk.isNullable);
+    const nullableFk = [...classFkList.values()].filter(fk => fk.isNullable);
 
     if (nullableFk.length === 0) return;
     this.cacheStorage.entitiesPropsCache.set(entityClass, new Map());
