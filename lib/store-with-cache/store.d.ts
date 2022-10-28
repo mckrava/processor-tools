@@ -51,7 +51,7 @@ export declare class CacheStorage {
     entitiesForPreSave: CacheStorageEntitiesScope;
     entitiesPropsCache: Map<EntityClassConstructable, Map<string, Record<"id", any>>>;
     private entityIdsFetched;
-    private entityIdsNew;
+    entityIdsNew: Map<EntityClassConstructable, Set<string>>;
     private constructor();
     static getInstance(): CacheStorage;
     get entitiesForFlushAll(): Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>;
@@ -63,12 +63,25 @@ export declare class CacheStorage {
      */
     trackEntityStatus<E extends Entity>(e: E, forFlush: boolean): void;
     isEntityNew<E extends Entity>(e: E): boolean;
+    purgeCacheStorage(): void;
 }
 export declare class Store {
     private em;
     private cacheStorage;
     private schemaMetadata;
     constructor(em: () => Promise<EntityManager>, cacheStorage: CacheStorage, schemaMetadata: SchemaMetadata);
+    /**
+     * If there are unresolved gets
+     */
+    get ready(): boolean;
+    /**
+     * If there were upsets after .load()
+     */
+    get isDirty(): boolean;
+    /**
+     * Returns full cache data
+     */
+    get entries(): CacheStorageEntitiesScope;
     /**
      * Add request for loading all entities of defined class.
      */
@@ -124,10 +137,6 @@ export declare class Store {
      */
     values<T extends Entity>(entityConstructor: EntityClass<T>): IterableIterator<T> | [];
     /**
-     * Returns full cache data
-     */
-    entries(): CacheStorageEntitiesScope;
-    /**
      * Delete all entities of specific class from cache storage
      */
     clear<T extends Entity>(entityConstructor: EntityClass<T>): void;
@@ -135,14 +144,6 @@ export declare class Store {
      * Purge current cache.
      */
     purge(): void;
-    /**
-     * If there are unresolved gets
-     */
-    ready(): boolean;
-    /**
-     * If there were upsets after .load()
-     */
-    isDirty(): boolean;
     /**
      * ::: TypeORM Store methods :::
      */
@@ -197,6 +198,7 @@ export declare class Store {
      * :::::::::::::::::::::::::::::::::::::::::::::::::
      */
     private _removeEntitiesInDeferredRemove;
+    private _removeEntitiesInDeferredRemoveByClass;
     private _extractEntityClass;
     private _addEntitiesToPreSaveQueue;
     private _preSaveNewEntitiesAll;

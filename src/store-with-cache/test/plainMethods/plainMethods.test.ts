@@ -1,8 +1,8 @@
 import { assertNotNull } from '@subsquid/util-internal';
 import expect from 'expect';
 import { Equal } from 'typeorm';
-import { Item, Order } from './lib/model';
-import { createStore, getItemIds, getItems, useDatabase } from './util';
+import { Item, Order } from '../lib/model';
+import { createStore, getItemIds, getItems, useDatabase } from '../util';
 
 describe('Store Plain Methods', function () {
   describe('.save()', function () {

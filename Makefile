@@ -1,5 +1,5 @@
 test-store:
-	@npx mocha -r dotenv/config lib/store-with-cache/test/*.test.js --exit --timeout 5000
+	@npx mocha -r dotenv/config lib/store-with-cache/test/**/*.test.js --exit --timeout 5000
 
 
 up:

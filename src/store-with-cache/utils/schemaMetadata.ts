@@ -92,6 +92,7 @@ export class SchemaMetadata {
   sortClassesByEntitiesList(
     entities: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>
   ) {
+    let logger: Logger = createLogger('sqd:store').child('schema_metadata');
     this._graphInstance.setGraphSources({
       schemaMetadata: this._schemaMetadata,
       schemaMetadataSummarizedFk: this._schemaMetadataSummarizedFk
@@ -101,6 +102,9 @@ export class SchemaMetadata {
 
     this._entitiesOrderedList = this._graphInstance.sortedVertexesListBFS;
     this._entitiesRelationsTree = this._graphInstance.vertexesTreeFull;
+
+    // logger.trace(this._graphInstance.sortedVertexesListBFS, `entitiesOrderedList`);
+    // logger.trace(Object.fromEntries(this._graphInstance.vertexesTreeFull), `entitiesRelationsTree`);
   }
 
   generateEntitiesOrderedList() {
@@ -114,8 +118,8 @@ export class SchemaMetadata {
     this._entitiesOrderedList = this._graphInstance.sortedVertexesListBFS;
     this._entitiesRelationsTree = this._graphInstance.vertexesTreeFull;
 
-    logger.trace(this._schemaMetadata, `schemaMetadata`);
-    logger.trace(this._graphInstance.sortedVertexesListBFS, `entitiesOrderedList`);
-    logger.trace(Object.fromEntries(this._graphInstance.vertexesTreeFull), `entitiesRelationsTree`);
+    // logger.trace(this._schemaMetadata, `schemaMetadata`);
+    // logger.trace(this._graphInstance.sortedVertexesListBFS, `entitiesOrderedList`);
+    // logger.trace(Object.fromEntries(this._graphInstance.vertexesTreeFull), `entitiesRelationsTree`);
   }
 }

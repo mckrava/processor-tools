@@ -16,4 +16,5 @@ export declare function createStore(): Store;
 export declare function getItems(): Promise<Item[]>;
 export declare function getItemIds(): Promise<string[]>;
 export declare function generateListOfItems(count?: number): Item[];
+export declare function createSaveRelatedEntities(store: Store, withFlush?: boolean): Promise<void>;
 //# sourceMappingURL=util.d.ts.map

@@ -1,10 +1,18 @@
 import { assertNotNull } from '@subsquid/util-internal';
 import expect from 'expect';
 import { Equal } from 'typeorm';
-import { Item, Order } from './lib/model';
-import { createStore, generateListOfItems, getItemIds, getItems, useDatabase } from './util';
+import { Item, Order, Account, Post, Space } from '../lib/model';
+import {
+  createSaveRelatedEntities,
+  createStore,
+  generateListOfItems,
+  getItemIds,
+  getItems,
+  useDatabase
+} from '../util';
+import sqlQueries from '../lib/queries';
 
-describe('Store Deferred Methods', function () {
+describe('Store Deferred Methods :: Save/Update', function () {
   describe('.save()', function () {
     useDatabase([`CREATE TABLE item (id text primary key , name text, foo text);`]);
 
@@ -47,12 +55,7 @@ describe('Store Deferred Methods', function () {
   });
 
   describe('.remove()', function () {
-    useDatabase([
-      `CREATE TABLE item (id text primary key , name text, foo text)`,
-      `INSERT INTO item (id, name) values ('1', 'a')`,
-      `INSERT INTO item (id, name) values ('2', 'b')`,
-      `INSERT INTO item (id, name) values ('3', 'c')`
-    ]);
+    useDatabase(sqlQueries.deferredMethods.itemsList);
 
     it('removal by passing an entity', async function () {
       let store = createStore();
@@ -93,14 +96,7 @@ describe('Store Deferred Methods', function () {
   });
 
   describe('Update with un-fetched reference', function () {
-    useDatabase([
-      `CREATE TABLE item (id text primary key , name text, foo text)`,
-      `CREATE TABLE "order" (id text primary key, item_id text REFERENCES item, qty int4)`,
-      `INSERT INTO item (id, name) values ('1', 'a')`,
-      `INSERT INTO "order" (id, item_id, qty) values ('1', '1', 3)`,
-      `INSERT INTO item (id, name) values ('2', 'b')`,
-      `INSERT INTO "order" (id, item_id, qty) values ('2', '2', 3)`
-    ]);
+    useDatabase(sqlQueries.deferredMethods.simpleItemOrderOneToManyRel);
 
     it(".save() doesn't clear reference (single row update)", async function () {
       let store = createStore();
@@ -147,5 +143,62 @@ describe('Store Deferred Methods', function () {
       ]);
     });
   });
-  
+  describe('save/update cyclic relations', function () {
+    useDatabase(sqlQueries.deferredMethods.cyclicRel);
+
+    it('save all possible entity types at once', async function () {
+      let store = createStore();
+
+      await createSaveRelatedEntities(store);
+
+      await store.deferredLoad(Account).deferredLoad(Post).deferredLoad(Space).load();
+
+      const respDecorated: Record<string, Record<string, unknown>> = {};
+
+      for (const [entityClass, entitiesList] of [...store.entries]) {
+        respDecorated[entityClass.name] = {};
+        for (const [id, entity] of [...entitiesList]) {
+          respDecorated[entityClass.name][id] = entity;
+        }
+      }
+      expect(respDecorated).toEqual({
+        Account: {
+          '1': {
+            id: '1',
+            profileSpace: { id: '1' },
+            posts: [{ id: '1' }, { id: '2' }, { id: '2-1' }],
+            spacesCreated: [{ id: '1' }]
+          }
+        },
+        Space: {
+          '1': {
+            id: '1',
+            createdByAccount: { id: '1' },
+            profileSpace: { id: null },
+            posts: [{ id: '2' }, { id: '2-1' }]
+          }
+        },
+        Post: {
+          '1': {
+            id: '1',
+            parentPost: { id: null },
+            createdByAccount: { id: '1' },
+            space: { id: null }
+          },
+          '2': {
+            id: '2',
+            parentPost: { id: null },
+            createdByAccount: { id: '1' },
+            space: { id: '1' }
+          },
+          '2-1': {
+            id: '2-1',
+            parentPost: { id: '2' },
+            createdByAccount: { id: '1' },
+            space: { id: '1' }
+          }
+        }
+      });
+    });
+  });
 });

@@ -4,7 +4,7 @@ import { assertNotNull } from '@subsquid/util-internal';
 import { Client as PgClient, ClientBase } from 'pg';
 import { DataSource, EntityManager } from 'typeorm';
 import { CacheStorage, Store } from '../store';
-import { Item } from './lib/model';
+import { Account, Item, Post, Space } from './lib/model';
 import { SchemaMetadata } from '../utils/schemaMetadata';
 
 dotenv.config();
@@ -62,6 +62,7 @@ export function getEntityManager(): Promise<EntityManager> {
 export function createStore(): Store {
   const schemaMetadata = new SchemaMetadata(__dirname);
   const cacheStorage = CacheStorage.getInstance();
+  cacheStorage.purgeCacheStorage()
   return new Store(getEntityManager, cacheStorage, schemaMetadata);
 }
 
@@ -82,4 +83,24 @@ export function generateListOfItems(count: number = 3): Item[] {
     index++;
   }
   return list;
+}
+
+export async function createSaveRelatedEntities(store: Store, withFlush: boolean = true): Promise<void> {
+  const account = new Account({ id: '1' });
+  const space = new Space({ id: '1', createdByAccount: account });
+  account.profileSpace = space;
+
+  const posts = [
+    new Post({ id: '1', createdByAccount: account }),
+    new Post({ id: '2', createdByAccount: account, space })
+  ];
+  store.deferredUpsert(posts);
+
+  const comment = new Post({
+    id: '2-1',
+    createdByAccount: account,
+    space,
+    parentPost: await store.get(Post, '2', false)
+  });
+  if (withFlush) await store.deferredUpsert(account).deferredUpsert(space).deferredUpsert(comment).flush();
 }
