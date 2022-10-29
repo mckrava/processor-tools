@@ -22,7 +22,8 @@ export declare class SchemaMetadata {
     private _entitiesOrderedList;
     private _entitiesRelationsTree;
     private _graphInstance;
-    constructor();
+    private projectDir;
+    constructor(projectDir?: string);
     get schemaMetadata(): SchemaMetadataStruct;
     get schemaMetadataSummarizedFk(): SchemaMetadataSummarizedFk;
     get entitiesOrderedList(): string[];

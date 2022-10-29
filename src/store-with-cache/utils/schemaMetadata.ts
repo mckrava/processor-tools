@@ -22,8 +22,10 @@ export class SchemaMetadata {
   private _entitiesOrderedList: string[] = [];
   private _entitiesRelationsTree: Map<string, string[]> = new Map();
   private _graphInstance: Graph;
+  private projectDir: string | undefined;
 
-  constructor() {
+  constructor(projectDir?: string) {
+    this.projectDir = projectDir;
     this._graphInstance = new Graph();
     this.processSchema();
   }
@@ -42,7 +44,7 @@ export class SchemaMetadata {
   }
 
   processSchema(): SchemaMetadata {
-    let model: Model = loadModel(resolveGraphqlSchema());
+    let model: Model = loadModel(resolveGraphqlSchema(this.projectDir));
     this._schemaMetadata = new Map();
     this._schemaMetadataSummarizedFk = new Map();
 
@@ -90,6 +92,7 @@ export class SchemaMetadata {
   sortClassesByEntitiesList(
     entities: Map<EntityClassConstructable, Map<string, CachedModel<EntityClassConstructable>>>
   ) {
+    let logger: Logger = createLogger('sqd:store').child('schema_metadata');
     this._graphInstance.setGraphSources({
       schemaMetadata: this._schemaMetadata,
       schemaMetadataSummarizedFk: this._schemaMetadataSummarizedFk
@@ -99,6 +102,9 @@ export class SchemaMetadata {
 
     this._entitiesOrderedList = this._graphInstance.sortedVertexesListBFS;
     this._entitiesRelationsTree = this._graphInstance.vertexesTreeFull;
+
+    // logger.trace(this._graphInstance.sortedVertexesListBFS, `entitiesOrderedList`);
+    // logger.trace(Object.fromEntries(this._graphInstance.vertexesTreeFull), `entitiesRelationsTree`);
   }
 
   generateEntitiesOrderedList() {
@@ -112,8 +118,8 @@ export class SchemaMetadata {
     this._entitiesOrderedList = this._graphInstance.sortedVertexesListBFS;
     this._entitiesRelationsTree = this._graphInstance.vertexesTreeFull;
 
-    logger.trace(this._schemaMetadata, `schemaMetadata`);
-    logger.trace(this._graphInstance.sortedVertexesListBFS, `entitiesOrderedList`);
-    logger.trace(Object.fromEntries(this._graphInstance.vertexesTreeFull), `entitiesRelationsTree`);
+    // logger.trace(this._schemaMetadata, `schemaMetadata`);
+    // logger.trace(this._graphInstance.sortedVertexesListBFS, `entitiesOrderedList`);
+    // logger.trace(Object.fromEntries(this._graphInstance.vertexesTreeFull), `entitiesRelationsTree`);
   }
 }

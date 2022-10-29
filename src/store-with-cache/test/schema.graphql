@@ -1,0 +1,32 @@
+type Item @entity {
+  id: ID!
+  name: String
+  foo: String
+}
+
+type Order @entity {
+  id: ID!
+  item: Item
+  qty: Int
+}
+
+type Account @entity {
+  id: ID!
+  profileSpace: Space
+  posts: [Post] @derivedFrom(field: "createdByAccount")
+  spacesCreated: [Space!] @derivedFrom(field: "createdByAccount")
+}
+
+type Post @entity  {
+  id: ID!
+  parentPost: Post
+  createdByAccount: Account!
+  space: Space
+}
+
+type Space @entity {
+  id: ID!
+  createdByAccount: Account!
+  profileSpace: Account
+  posts: [Post]! @derivedFrom(field: "space")
+}
