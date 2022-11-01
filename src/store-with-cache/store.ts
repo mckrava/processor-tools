@@ -183,6 +183,13 @@ export class Store {
   }
 
   /**
+   * Returns full current map of ids for flush
+   */
+  get entityIdsForFlush() {
+    return this.cacheStorage.entityIdsForFlush;
+  }
+
+  /**
    * Add request for loading all entities of defined class.
    */
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>): Store;

@@ -83,6 +83,10 @@ export declare class Store {
      */
     get entries(): CacheStorageEntitiesScope;
     /**
+     * Returns full current map of ids for flush
+     */
+    get entityIdsForFlush(): Map<EntityClassConstructable, Set<string>>;
+    /**
      * Add request for loading all entities of defined class.
      */
     deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>): Store;
