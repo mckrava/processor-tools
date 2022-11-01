@@ -87,6 +87,10 @@ export declare class Store {
      */
     get entityIdsForFlush(): Map<EntityClassConstructable, Set<string>>;
     /**
+     * Returns full current map of ids for load
+     */
+    get idsForDeferredLoad(): Map<EntityClassConstructable, Set<string>>;
+    /**
      * Add request for loading all entities of defined class.
      */
     deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>): Store;

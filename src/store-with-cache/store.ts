@@ -190,6 +190,13 @@ export class Store {
   }
 
   /**
+   * Returns full current map of ids for load
+   */
+  get idsForDeferredLoad() {
+    return this.cacheStorage.deferredGetList;
+  }
+
+  /**
    * Add request for loading all entities of defined class.
    */
   deferredLoad<T extends Entity>(entityConstructor: EntityClass<T>): Store;
