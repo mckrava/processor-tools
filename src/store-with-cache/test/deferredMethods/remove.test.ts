@@ -13,19 +13,19 @@ import {
 import sqlQueries from '../lib/queries';
 
 describe('Store Deferred Methods :: Remove', function () {
-  describe('remove cyclic relations', function () {
-    useDatabase(sqlQueries.deferredMethods.cyclicRel);
-
-    it('deferredRemove not fetched item by id', async function () {
-      let store = createStore();
-      await createSaveRelatedEntities(store);
-
-      await expect(store.get(Post, '2-1')).resolves.not.toBeNull();
-
-      store.purge();
-
-      await store.deferredRemove(Post, '2-1').flush();
-      await expect(store.get(Post, '2-1')).resolves.toBeNull();
-    });
-  });
+  // describe('remove cyclic relations', function () {
+  //   useDatabase(sqlQueries.deferredMethods.cyclicRel);
+  //
+  //   it('deferredRemove not fetched item by id', async function () {
+  //     let store = createStore();
+  //     await createSaveRelatedEntities(store);
+  //
+  //     await expect(store.get(Post, '2-1')).resolves.not.toBeNull();
+  //
+  //     store.purge();
+  //
+  //     await store.deferredRemove(Post, '2-1').flush();
+  //     await expect(store.get(Post, '2-1')).resolves.toBeNull();
+  //   });
+  // });
 });

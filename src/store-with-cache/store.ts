@@ -870,7 +870,7 @@ export class Store {
     const classFkList = this.schemaMetadata.schemaMetadata.get(entityClass.name)!.foreignKeys;
     const nullableFk = [...classFkList.values()].filter(fk => fk.isNullable);
 
-    if (nullableFk.length === 0) return;
+    // if (nullableFk.length === 0) return;
     this.cacheStorage.entitiesPropsCache.set(entityClass, new Map());
     if (!this.cacheStorage.entitiesForPreSave.has(entityClass))
       this.cacheStorage.entitiesForPreSave.set(entityClass, new Map());
@@ -916,6 +916,7 @@ export class Store {
     this.cacheStorage.entitiesForPreSave.delete(entityClass);
   }
 
+  // TODO refactor to avoid double-save action of presaved entities
   private async _saveEntitiesWithPropsCacheRestore(
     entityClass: EntityClassConstructable,
     entities: CachedModel<EntityClassConstructable>[]
