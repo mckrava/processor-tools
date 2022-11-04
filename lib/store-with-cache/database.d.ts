@@ -5,6 +5,7 @@ export declare type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEAT
 export interface TypeormDatabaseOptions {
     stateSchema?: string;
     isolationLevel?: IsolationLevel;
+    disableAutoFlush?: boolean;
 }
 declare class BaseDatabase<S> {
     protected statusSchema: string;
@@ -35,6 +36,7 @@ declare class BaseDatabase<S> {
 export declare class TypeormDatabase extends BaseDatabase<Store> {
     schemaMetadata: SchemaMetadata;
     cacheStorage: CacheStorage;
+    disableAutoFlush: boolean;
     constructor(options?: TypeormDatabaseOptions);
     protected runTransaction(from: number, to: number, cb: (store: Store) => Promise<void>): Promise<void>;
     private createTx;

@@ -14,6 +14,7 @@ export type IsolationLevel = 'SERIALIZABLE' | 'READ COMMITTED' | 'REPEATABLE REA
 export interface TypeormDatabaseOptions {
   stateSchema?: string;
   isolationLevel?: IsolationLevel;
+  disableAutoFlush?: boolean;
 }
 
 class BaseDatabase<S> {
@@ -120,11 +121,13 @@ class BaseDatabase<S> {
 export class TypeormDatabase extends BaseDatabase<Store> {
   schemaMetadata: SchemaMetadata;
   cacheStorage: CacheStorage;
+  disableAutoFlush = false;
 
   constructor(options?: TypeormDatabaseOptions) {
     super(options);
     this.schemaMetadata = new SchemaMetadata(process.env.PROJECT_DIR);
     this.cacheStorage = CacheStorage.getInstance();
+    this.disableAutoFlush = (options || {}).disableAutoFlush ?? false;
   }
   protected async runTransaction(from: number, to: number, cb: (store: Store) => Promise<void>): Promise<void> {
     let tx: Promise<Tx> | undefined;
@@ -141,8 +144,10 @@ export class TypeormDatabase extends BaseDatabase<Store> {
     );
     try {
       await cb(store);
-      await store.flush();
-      store.purge();
+      if (!this.disableAutoFlush) {
+        await store.flush();
+        store.purge();
+      }
     } catch (e: any) {
       open = false;
       if (tx) {
