@@ -909,7 +909,7 @@ export class Store {
   ): Promise<void> {
     await this.em().then(async em => {
       for (let b of splitIntoBatches([...entities.values()], 1000)) {
-        await em.insert(entityClass, b as any);
+        await em.upsert(entityClass, b as any, ['id']);
       }
     });
     entities.forEach(e => this.cacheStorage.trackEntityStatus(e, false));
