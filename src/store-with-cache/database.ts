@@ -15,6 +15,8 @@ export interface TypeormDatabaseOptions {
   stateSchema?: string;
   isolationLevel?: IsolationLevel;
   disableAutoFlush?: boolean;
+  disableAutoTxCommit?: boolean;
+  disableAutoHeightUpdate?: boolean;
 }
 
 class BaseDatabase<S> {
@@ -122,12 +124,16 @@ export class TypeormDatabase extends BaseDatabase<Store> {
   schemaMetadata: SchemaMetadata;
   cacheStorage: CacheStorage;
   disableAutoFlush = false;
+  disableAutoTxCommit = false;
+  disableAutoHeightUpdate = false;
 
   constructor(options?: TypeormDatabaseOptions) {
     super(options);
     this.schemaMetadata = new SchemaMetadata(process.env.PROJECT_DIR);
     this.cacheStorage = CacheStorage.getInstance();
     this.disableAutoFlush = (options || {}).disableAutoFlush ?? false;
+    this.disableAutoTxCommit = (options || {}).disableAutoTxCommit ?? false;
+    this.disableAutoHeightUpdate = (options || {}).disableAutoHeightUpdate ?? false;
   }
   protected async runTransaction(from: number, to: number, cb: (store: Store) => Promise<void>): Promise<void> {
     let tx: Promise<Tx> | undefined;
@@ -140,7 +146,16 @@ export class TypeormDatabase extends BaseDatabase<Store> {
         return tx.then(tx => tx.em);
       },
       this.cacheStorage,
-      this.schemaMetadata
+      this.schemaMetadata,
+      async () => {
+        open = false;
+        if (tx) {
+          const t = await tx
+          await this.updateHeight(t.em, from, to)
+          await t.commit();
+          this.lastCommitted = to;
+        }
+      }
     );
     try {
       await cb(store);
@@ -157,7 +172,7 @@ export class TypeormDatabase extends BaseDatabase<Store> {
     }
 
     open = false;
-    if (tx) {
+    if (tx && !this.disableAutoTxCommit) {
       await tx.then(t => t.commit());
       this.lastCommitted = to;
     }
@@ -167,7 +182,7 @@ export class TypeormDatabase extends BaseDatabase<Store> {
     let con = assertNotNull(this.con, 'not connected');
     let tx = await createTransaction(con, this.isolationLevel);
     try {
-      await this.updateHeight(tx.em, from, to);
+      if (!this.disableAutoHeightUpdate) await this.updateHeight(tx.em, from, to);
       return tx;
     } catch (e: any) {
       await tx.rollback().catch(() => {});

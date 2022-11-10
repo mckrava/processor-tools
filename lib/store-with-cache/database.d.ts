@@ -6,6 +6,8 @@ export interface TypeormDatabaseOptions {
     stateSchema?: string;
     isolationLevel?: IsolationLevel;
     disableAutoFlush?: boolean;
+    disableAutoTxCommit?: boolean;
+    disableAutoHeightUpdate?: boolean;
 }
 declare class BaseDatabase<S> {
     protected statusSchema: string;
@@ -37,6 +39,8 @@ export declare class TypeormDatabase extends BaseDatabase<Store> {
     schemaMetadata: SchemaMetadata;
     cacheStorage: CacheStorage;
     disableAutoFlush: boolean;
+    disableAutoTxCommit: boolean;
+    disableAutoHeightUpdate: boolean;
     constructor(options?: TypeormDatabaseOptions);
     protected runTransaction(from: number, to: number, cb: (store: Store) => Promise<void>): Promise<void>;
     private createTx;

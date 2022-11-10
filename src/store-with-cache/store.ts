@@ -158,7 +158,8 @@ export class Store {
   constructor(
     private em: () => Promise<EntityManager>,
     private cacheStorage: CacheStorage,
-    private schemaMetadata: SchemaMetadata
+    private schemaMetadata: SchemaMetadata,
+    private txCommit?: () => Promise<void>
   ) {}
 
   /**
@@ -194,6 +195,15 @@ export class Store {
    */
   get idsForDeferredLoad() {
     return this.cacheStorage.deferredGetList;
+  }
+
+  /**
+   * UNSAFE method. Executes Entity Manager Transaction, initiated in current batch.
+   * @constructor
+   */
+  UNSAFE_commitTransaction(): Promise<void> {
+    if (!this.txCommit) return Promise.resolve();
+    return this.txCommit();
   }
 
   /**
@@ -234,6 +244,8 @@ export class Store {
   deferredRemove<T extends Entity>(entities: T[]): Store;
   deferredRemove<T extends Entity>(entityConstructor: EntityClass<T>, idOrList: string | string[]): Store;
   deferredRemove<T extends Entity>(e: T | T[] | EntityClass<T>, idOrList?: string | string[]): Store {
+    if (Array.isArray(e) && e.length === 0) return this;
+
     const entityClass = this._extractEntityClass(e);
     let idsList: string[] = [];
     if (idOrList && !Array.isArray(e) && !('id' in e)) {

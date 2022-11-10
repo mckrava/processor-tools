@@ -69,7 +69,8 @@ export declare class Store {
     private em;
     private cacheStorage;
     private schemaMetadata;
-    constructor(em: () => Promise<EntityManager>, cacheStorage: CacheStorage, schemaMetadata: SchemaMetadata);
+    private txCommit?;
+    constructor(em: () => Promise<EntityManager>, cacheStorage: CacheStorage, schemaMetadata: SchemaMetadata, txCommit?: (() => Promise<void>) | undefined);
     /**
      * If there are unresolved gets
      */
@@ -90,6 +91,11 @@ export declare class Store {
      * Returns full current map of ids for load
      */
     get idsForDeferredLoad(): Map<EntityClassConstructable, Set<string>>;
+    /**
+     * UNSAFE method. Executes Entity Manager Transaction, initiated in current batch.
+     * @constructor
+     */
+    UNSAFE_commitTransaction(): Promise<void>;
     /**
      * Add request for loading all entities of defined class.
      */
