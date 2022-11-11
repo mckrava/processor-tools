@@ -27,7 +27,7 @@ class BaseDatabase<S> {
 
   constructor(options?: TypeormDatabaseOptions) {
     this.statusSchema = options?.stateSchema ? `"${options.stateSchema}"` : 'squid_processor';
-    this.isolationLevel = 'SERIALIZABLE';
+    this.isolationLevel = options?.isolationLevel || 'SERIALIZABLE';
   }
 
   async connect(): Promise<number> {
@@ -150,8 +150,8 @@ export class TypeormDatabase extends BaseDatabase<Store> {
       async () => {
         open = false;
         if (tx) {
-          const t = await tx
-          await this.updateHeight(t.em, from, to)
+          const t = await tx;
+          await this.updateHeight(t.em, from, to);
           await t.commit();
           this.lastCommitted = to;
         }
