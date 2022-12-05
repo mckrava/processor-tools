@@ -811,7 +811,9 @@ export class Store {
    * @param id
    * @param fetchFromDb
    */
-  async get<E extends Entity>(entityClass: EntityClass<E>, id: string, fetchFromDb: boolean = true): Promise<E | null> {
+  async get<E extends Entity>(entityClass: EntityClass<E>, id: string | null | undefined, fetchFromDb: boolean = true): Promise<E | null> {
+    if (id === null || id === undefined) return null;
+
     const cachedVal =
       (this.cacheStorage.entities.get(entityClass) || new Map<string, CachedModel<EntityClassConstructable>>()).get(
         id

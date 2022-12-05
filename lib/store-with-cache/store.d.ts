@@ -204,7 +204,7 @@ export declare class Store {
      * @param id
      * @param fetchFromDb
      */
-    get<E extends Entity>(entityClass: EntityClass<E>, id: string, fetchFromDb?: boolean): Promise<E | null>;
+    get<E extends Entity>(entityClass: EntityClass<E>, id: string | null | undefined, fetchFromDb?: boolean): Promise<E | null>;
     getOrFail<E extends Entity>(entityClass: EntityClass<E>, id: string): Promise<E>;
     /**
      * :::::::::::::::::::::::::::::::::::::::::::::::::
