@@ -125,7 +125,7 @@ export declare class Store {
      * Load all deferred get from the db, clear deferredLoad and deferredFindWhereList items list,
      * set loaded items to cache storage.
      */
-    load(): Promise<void>;
+    load(batchSize?: number): Promise<void>;
     /**
      * Persist all updates to the db.
      *

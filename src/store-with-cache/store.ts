@@ -333,8 +333,8 @@ export class Store {
    * Load all deferred get from the db, clear deferredLoad and deferredFindWhereList items list,
    * set loaded items to cache storage.
    */
-  async load(): Promise<void> {
-    for (const [entityClass, idsSet] of this.cacheStorage.deferredGetList.entries()) {
+  async load(batchSize: number = -1): Promise<void> {
+    const fetchHandler = async (entityClass: EntityClassConstructable, idsSet: Set<string>): Promise<void> => {
       /**
        * Fetch all available entities of iterated class.
        */
@@ -344,16 +344,26 @@ export class Store {
         });
 
         this._upsert(entitiesList, false);
-        continue;
+        return;
       }
 
-      if (!idsSet || idsSet.size === 0) continue;
+      if (!idsSet || idsSet.size === 0) return;
 
       const entitiesList: CachedModel<typeof entityClass>[] = await this.find(entityClass, {
         where: { id: In([...idsSet.values()]) }
       });
 
       this._upsert(entitiesList, false);
+    };
+
+    for (const [entityClass, idsSet] of this.cacheStorage.deferredGetList.entries()) {
+      if (batchSize < 0) {
+        await fetchHandler(entityClass, idsSet);
+      } else {
+        for (let batch of splitIntoBatches([...idsSet.values()], batchSize)) {
+          await fetchHandler(entityClass, new Set(batch));
+        }
+      }
     }
 
     this.cacheStorage.deferredGetList.clear();
@@ -811,7 +821,11 @@ export class Store {
    * @param id
    * @param fetchFromDb
    */
-  async get<E extends Entity>(entityClass: EntityClass<E>, id: string | null | undefined, fetchFromDb: boolean = true): Promise<E | null> {
+  async get<E extends Entity>(
+    entityClass: EntityClass<E>,
+    id: string | null | undefined,
+    fetchFromDb: boolean = true
+  ): Promise<E | null> {
     if (id === null || id === undefined) return null;
 
     const cachedVal =
