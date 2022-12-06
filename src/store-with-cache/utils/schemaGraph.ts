@@ -143,7 +143,7 @@ export class Graph {
     }
 
     for (const i in cyclicIndegree) {
-      if (cyclicIndegree[i] === 0) q.push(i);
+      if (cyclicIndegree[i] <= 0) q.push(i);
     }
 
     /**
