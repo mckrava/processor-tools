@@ -17,6 +17,7 @@ export interface TypeormDatabaseOptions {
   disableAutoFlush?: boolean;
   disableAutoTxCommit?: boolean;
   disableAutoHeightUpdate?: boolean;
+  saveBatchSize?: number;
 }
 
 class BaseDatabase<S> {
@@ -126,6 +127,7 @@ export class TypeormDatabase extends BaseDatabase<Store> {
   disableAutoFlush = false;
   disableAutoTxCommit = false;
   disableAutoHeightUpdate = false;
+  saveBatchSize = 1000;
 
   constructor(options?: TypeormDatabaseOptions) {
     super(options);
@@ -134,6 +136,7 @@ export class TypeormDatabase extends BaseDatabase<Store> {
     this.disableAutoFlush = (options || {}).disableAutoFlush ?? false;
     this.disableAutoTxCommit = (options || {}).disableAutoTxCommit ?? false;
     this.disableAutoHeightUpdate = (options || {}).disableAutoHeightUpdate ?? false;
+    this.saveBatchSize = (options || {}).saveBatchSize ?? 1000;
   }
   protected async runTransaction(from: number, to: number, cb: (store: Store) => Promise<void>): Promise<void> {
     let tx: Promise<Tx> | undefined;
@@ -146,6 +149,7 @@ export class TypeormDatabase extends BaseDatabase<Store> {
         return tx.then(tx => tx.em);
       },
       this.cacheStorage,
+      this.saveBatchSize,
       this.schemaMetadata,
       async () => {
         open = false;

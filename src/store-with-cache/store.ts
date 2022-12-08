@@ -158,6 +158,7 @@ export class Store {
   constructor(
     private em: () => Promise<EntityManager>,
     private cacheStorage: CacheStorage,
+    private saveBatchSize: number,
     private schemaMetadata: SchemaMetadata,
     private txCommit?: () => Promise<void>
   ) {}
@@ -333,7 +334,7 @@ export class Store {
    * Load all deferred get from the db, clear deferredLoad and deferredFindWhereList items list,
    * set loaded items to cache storage.
    */
-  async load(batchSize: number = -1): Promise<void> {
+  async load(batchSize: number = 1000): Promise<void> {
     const fetchHandler = async (entityClass: EntityClassConstructable, idsSet: Set<string>): Promise<void> => {
       /**
        * Fetch all available entities of iterated class.
@@ -613,7 +614,7 @@ export class Store {
   }
 
   private async upsertMany(em: EntityManager, entityClass: EntityClass<any>, entities: any[]): Promise<void> {
-    for (let b of splitIntoBatches(entities, 1000)) {
+    for (let b of splitIntoBatches(entities, this.saveBatchSize)) {
       await em.upsert(entityClass, b as any, ['id']);
     }
   }
@@ -635,7 +636,7 @@ export class Store {
         assert(entityClass === e[i].constructor, 'mass saving allowed only for entities of the same class');
       }
       await this.em().then(async em => {
-        for (let b of splitIntoBatches(e, 1000)) {
+        for (let b of splitIntoBatches(e, this.saveBatchSize)) {
           await em.insert(entityClass, b as any);
         }
       });
@@ -936,7 +937,7 @@ export class Store {
     entities: CachedModel<EntityClassConstructable>[]
   ): Promise<void> {
     await this.em().then(async em => {
-      for (let b of splitIntoBatches([...entities.values()], 1000)) {
+      for (let b of splitIntoBatches([...entities.values()], this.saveBatchSize)) {
         await em.upsert(entityClass, b as any, ['id']);
       }
     });

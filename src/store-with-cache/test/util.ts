@@ -63,7 +63,7 @@ export function createStore(): Store {
   const schemaMetadata = new SchemaMetadata(__dirname);
   const cacheStorage = CacheStorage.getInstance();
   cacheStorage.purgeCacheStorage()
-  return new Store(getEntityManager, cacheStorage, schemaMetadata);
+  return new Store(getEntityManager, cacheStorage, 1000, schemaMetadata);
 }
 
 export async function getItems(): Promise<Item[]> {

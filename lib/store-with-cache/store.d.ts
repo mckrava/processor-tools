@@ -68,9 +68,10 @@ export declare class CacheStorage {
 export declare class Store {
     private em;
     private cacheStorage;
+    private saveBatchSize;
     private schemaMetadata;
     private txCommit?;
-    constructor(em: () => Promise<EntityManager>, cacheStorage: CacheStorage, schemaMetadata: SchemaMetadata, txCommit?: (() => Promise<void>) | undefined);
+    constructor(em: () => Promise<EntityManager>, cacheStorage: CacheStorage, saveBatchSize: number, schemaMetadata: SchemaMetadata, txCommit?: (() => Promise<void>) | undefined);
     /**
      * If there are unresolved gets
      */
